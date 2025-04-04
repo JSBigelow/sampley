@@ -1,21 +1,26 @@
 [project]
-name = 'thinst'
+name = 'sampley'
 version = '0.0.1'
 
 dependencies = [
+    'geopandas > 1.0.0',
+    'matplotlib > 3.0.0',
     'numpy > 2.0.0',
     'pandas > 2.0.0',
+    'pyogrio',
+    'pyproj > 3.0.0',
     'pytz > 2024.1',
     'scipy > 1.0.0',
     'shapely > 2.0.0',
+    'thinst',
     'matplotlib > 3.0.0'
 ]
 
 requires-python = '>= 3.8'
 
-authors = [{name = "Jonathan Syme", email = "jsyme@bigelow.org"}]
-maintainers = [{name = "Jonathan Syme", email = "jsyme@bigelow.org"}]
-description = 'Thin data spatiotemporally'
+authors = [{name = 'Jonathan Syme', email = 'jsyme@bigelow.org'}]
+maintainers = [{name = 'Jonathan Syme', email = 'jsyme@bigelow.org'}]
+description = 'sample survey data'
 readme = 'README.md'
 license = 'MIT'
 license-files = ['LICENSE']
@@ -25,4 +30,5 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = 'https://github.com/JSBigelow/thinst'
+Homepage = 'https://github.com/JSBigelow/sampley'
+Repository = 'https://github.com/JSBigelow/sampley'

@@ -487,7 +487,9 @@ class AbsenceLines:
         if crs_output is not None:
             check_crs(par='crs_output', crs=crs_output)
             output_lines = reproject(output_lines, crs_output)
-        output_lines.to_file(folder + '/' + self.name + '-absencelines.gpkg')
+
+        output_lines[['section_id', 'date', 'absencelines']].to_file(folder + '/' + self.name + '-absencelines.gpkg')
+        output_lines[['section_id', 'date', 'presencezones']].to_file(folder + '/' + self.name + '-presencezones.gpkg')
 
 
 class Absences:

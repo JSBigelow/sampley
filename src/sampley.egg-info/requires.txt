@@ -1,0 +1,11 @@
+geopandas>1.0.0
+matplotlib>3.0.0
+numpy>2.0.0
+pandas>2.0.0
+pyogrio
+pyproj>3.0.0
+pytz>2024.1
+scipy>1.0.0
+shapely>2.0.0
+thinst
+matplotlib>3.0.0
