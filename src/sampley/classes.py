@@ -23,7 +23,7 @@ class DataPoints:
             x_col: str = 'lon',
             y_col: str = 'lat',
             geometry_col: str = None,
-            crs_input: str | int | pyproj.crs.crs.CRS = 'EPSG:4326',
+            crs_input: str | int | pyproj.crs.crs.CRS = None,
             crs_working: str | int | pyproj.crs.crs.CRS = None,
             datetime_col: str | None = None,
             tz_input: str | timezone | pytz.BaseTzInfo | None = None,

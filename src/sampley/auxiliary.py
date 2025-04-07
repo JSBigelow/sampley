@@ -63,7 +63,7 @@ def check_dtype(par: str, obj, dtypes, none_allowed: bool = False):
 
 
 # CRS
-def check_crs(par: str, crs: str | int | pyproj.crs.crs.CRS, none_allowed: bool = False, projected: bool = False):
+def check_crs(par: str, crs: str | int | pyproj.crs.crs.CRS, none_allowed: bool = False):
     check_dtype(par='crs', obj=crs, dtypes=[str, int, pyproj.crs.crs.CRS], none_allowed=none_allowed)
     if none_allowed and crs is None:
         crs_name = 'None'
@@ -94,13 +94,22 @@ def check_crs(par: str, crs: str | int | pyproj.crs.crs.CRS, none_allowed: bool 
             '\n    \'epsg:4326\''
             '\n    4326'
             '\n____________________')
-    if projected:
-        if not crs.is_projected:
-            raise Exception('\n\n____________________'
-                            '\nCRSError: CRS is not projected.'
-                            f'\n  The value for \'{par}\' is {crs_name}'
-                            f'\nPlease ensure that the value for \'{par}\' is a projected CRS.'
-                            '\n____________________')
+
+
+# check that a CRS is projected (assumed that check_crs() has been run prior)
+def check_projected(obj_name: str, crs: str | int | pyproj.crs.crs.CRS) -> None:
+    if not crs.is_projected:  # if the CRS is not projected
+        if isinstance(crs, pyproj.crs.crs.CRS):
+            crs_name = '\'' + str(crs) + '\''  # get its name
+        elif isinstance(crs, (str, int)):
+            crs_name = '\'' + crs + '\'' if isinstance(crs, str) else crs  # get its name
+        else:
+            crs_name = crs
+        raise Exception('\n\n____________________'  # raise exception
+                        '\nCRSError: CRS is not projected.'
+                        f'\n  The CRS of {obj_name} is {crs_name}'
+                        f'\nPlease ensure that the CRS is projected.'
+                        '\n____________________')
 
 
 # timezone
@@ -147,7 +156,6 @@ def check_tz(par: str, tz: str | timezone | pytz.BaseTzInfo, none_allowed: bool 
 ##############################################################################################################
 # Operations
 def open_file(filepath: str) -> pd.DataFrame | gpd.GeoDataFrame:
-    print('Opening file...')
     input_ext = os.path.splitext(filepath)[1].lower()
     try:
         if input_ext == '.csv':
@@ -184,7 +192,6 @@ def remove_cols(df: pd.DataFrame, cols: str | list[str]):
 
 
 def parse_xy(df: pd.DataFrame, x_col: str, y_col: str, crs: str | int | pyproj.crs.crs.CRS) -> gpd.GeoDataFrame:
-    print('Parsing x and y (lon/lat) coordinates...')
     try:
         gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df[x_col], df[y_col]), crs=crs)
         gdf.drop([x_col, y_col], axis=1, inplace=True)
@@ -198,7 +205,6 @@ def parse_xy(df: pd.DataFrame, x_col: str, y_col: str, crs: str | int | pyproj.c
 
 
 def parse_geoms(df: pd.DataFrame, geometry_col: str, crs: str | int | pyproj.crs.crs.CRS) -> gpd.GeoDataFrame:
-    print('Parsing geometries...')
     try:
         df[geometry_col] = df[geometry_col].apply(wkt.loads)
     except TypeError:
@@ -214,7 +220,6 @@ def parse_geoms(df: pd.DataFrame, geometry_col: str, crs: str | int | pyproj.crs
 
 def reproject_crs(gdf: gpd.GeoSeries | gpd.GeoDataFrame, crs_target: str | int | pyproj.crs.crs.CRS):
     if crs_target is not None:
-        print('Reprojecting CRS...')
         crs_name = '\'' + crs_target + '\'' if isinstance(crs_target, str) else (
                 '\'' + str(crs_target) + '\'') if isinstance(crs_target, pyproj.crs.crs.CRS) else crs_target
         if crs_target != gdf.crs:
@@ -226,7 +231,6 @@ def reproject_crs(gdf: gpd.GeoSeries | gpd.GeoDataFrame, crs_target: str | int |
 
 
 def parse_dts(df: pd.DataFrame, datetime_col: str, datetime_format: str | None = None, tz: str | timezone | pytz.BaseTzInfo | None = None):
-    print('Parsing datetimes...')
     try:
         df[datetime_col] = df[datetime_col].astype(str)
         df[datetime_col] = pd.to_datetime(df[datetime_col], format=datetime_format)
@@ -265,7 +269,6 @@ def parse_dts(df: pd.DataFrame, datetime_col: str, datetime_format: str | None =
 
 def convert_tz(df: pd.DataFrame, datetime_col: str, tz_target: str | timezone | pytz.BaseTzInfo | None):
     if tz_target is not None:
-        print('Converting timezone...')
         tz_name = str(tz_target) if isinstance(tz_target, (timezone, pytz.BaseTzInfo)) else tz_target
         try:
             tz_current = str(df[datetime_col].dtype.tz)

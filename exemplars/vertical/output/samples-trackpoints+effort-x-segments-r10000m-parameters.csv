@@ -1,0 +1,20 @@
+,0
+names,samples-datapoints-trackpoints-x-segments-r10000m+samples-sections-trackpoints-x-segments-r10000m
+approach,segment
+resampled,datapoints; effort
+datapoints_name,datapoints-trackpoints; nan
+datapoints_filepath,./input/trackpoints.csv; nan
+datapoints_crs,EPSG:32619; nan
+datapoints_tz,UTC-05:00; nan
+datapoints_data_cols,"section_id, individuals, bss; nan"
+segments_name,segments-r10000m
+sections_name,sections-trackpoints
+segments_crs,EPSG:32619
+segments_var,redistribution
+segments_randomise,False
+segments_target,10000
+segments_unit,metre
+cols,"{'individuals': 'sum', 'bss': 'mean'}; nan"
+effort_esw,nan; None
+effort_audf,nan; None
+effort_euc-geo,nan; euclidean

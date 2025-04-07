@@ -22,7 +22,7 @@ def datapoints_from_file(
         x_col: str = 'lon',
         y_col: str = 'lat',
         geometry_col: str = None,
-        crs_input: str | int | pyproj.crs.crs.CRS = 'EPSG:4326',
+        crs_input: str | int | pyproj.crs.crs.CRS = None,
         crs_working: str | int | pyproj.crs.crs.CRS = None,
         datetime_col: str = None,
         datetime_format: str = None,
@@ -47,6 +47,7 @@ def datapoints_from_file(
             check_dtype(par='geometry_col', obj=geometry_col, dtypes=str, none_allowed=True)
             check_cols(df=datapoints, cols=geometry_col)
             datapoints = parse_geoms(datapoints, geometry_col, crs_input)  # convert to geopandas GeoDataFrame
+
     gtypes = list(set([type(geometry) for geometry in datapoints.geometry]))  # get geometry types
     if len(gtypes) == 1 and gtypes[0] == Point:  # if there is one type: Point
         pass
@@ -56,8 +57,12 @@ def datapoints_from_file(
         datapoints = datapoints.explode()  # explode MultiPoints to Points
     else:  # else if there are other types, print error message...
         raise TypeError(f'geometries are not Points or MultiPoints. \nGeometry types include {', '.join(gtypes)}.')
-    check_crs(par='crs_working', crs=crs_working, none_allowed=True, projected=True)
-    datapoints = reproject_crs(datapoints, crs_working)  # reproject to CRS working
+
+    if crs_working is not None:  # if a working CRS is provided
+        check_crs(par='crs_working', crs=crs_working)
+        datapoints = reproject_crs(datapoints, crs_working)  # reproject to CRS working
+
+    check_projected(obj_name='datapoints', crs=datapoints.crs)  # check that the CRS is projected
 
     # temporal
     if datetime_col is not None:  # if datetime column specified
@@ -66,8 +71,9 @@ def datapoints_from_file(
         check_dtype(par='datetime_format', obj=datetime_format, dtypes=str, none_allowed=True)
         check_tz(par='tz_input', tz=tz_input, none_allowed=True)
         parse_dts(datapoints, datetime_col, datetime_format, tz_input)  # parse datetimes and set TZ
-        check_tz(par='tz_working', tz=tz_working, none_allowed=True)
-        datapoints = convert_tz(datapoints, datetime_col, tz_working)  # convert to working TZ
+        if tz_working is not None:  # if a working timezone is specified
+            check_tz(par='tz_working', tz=tz_working)
+            datapoints = convert_tz(datapoints, datetime_col, tz_working)  # convert to working TZ
         if datetime_col != 'datetime':  # if datetime column not already called 'datetime'...
             datapoints['datetime'] = datapoints[datetime_col]  # ...rename datetime column
             print(f'Note: column \'{datetime_col}\' renamed to \'datetime\'.')
@@ -133,8 +139,12 @@ def sections_from_file(
                         f'\nGeometry types include {', '.join(gtypes)}.'
                         '\nTo make sections from Points, first input the Points as DataPoints and then'
                         ' use Sections.from_datapoints() to make Sections from the DataPoints.')
-    check_crs(par='crs_working', crs=crs_working, none_allowed=True, projected=True)
-    sections = reproject_crs(sections, crs_working)  # reproject to CRS working
+
+    if crs_working is not None:  # if a working CRS is provided
+        check_crs(par='crs_working', crs=crs_working)
+        sections = reproject_crs(sections, crs_working)  # reproject to CRS working
+
+    check_projected(obj_name='sections', crs=sections.crs)  # check that the CRS is projected
 
     # temporal
     if datetime_col is not None:  # if datetime column specified
@@ -143,10 +153,11 @@ def sections_from_file(
         check_dtype(par='datetime_format', obj=datetime_format, dtypes=str, none_allowed=True)
         check_tz(par='tz_input', tz=tz_input, none_allowed=True)
         parse_dts(sections, datetime_col, datetime_format, tz_input)  # parse datetimes and set TZ
-        check_tz(par='tz_working', tz=tz_working, none_allowed=True)
-        datapoints = convert_tz(sections, datetime_col, tz_working)  # convert to working TZ
+        if tz_working is not None:  # if a working timezone is specified
+            check_tz(par='tz_working', tz=tz_working)
+            sections = convert_tz(sections, datetime_col, tz_working)  # convert to working TZ
         if datetime_col != 'datetime':  # if datetime column not already called 'datetime'...
-            datapoints.rename(columns={datetime_col: 'datetime'}, inplace=True)  # ...rename datetime column
+            sections.rename(columns={datetime_col: 'datetime'}, inplace=True)  # ...rename datetime column
             print(f'Note: column \'{datetime_col}\' renamed to \'datetime\'.')
     else:  # else if no datetime column specified...
         sections['datetime'] = None  # ...make dummy column with None
@@ -179,8 +190,6 @@ def sections_from_datapoints(
         cols: dict = None,
         sortby: str | list[str] = None,
         section_id_col: str = 'section_id'):
-    # section_col : str, optional, default 'section_id'
-    #   The name of the column containing the sections that each datapoint belongs to.
 
     sections = datapoints.copy()  # copy datapoints GeoDataFrame
 
@@ -269,7 +278,7 @@ def periods_delimit(
 
 
 def cells_delimit(
-        extent: gpd.GeoDataFrame | tuple[list, str],
+        extent: gpd.GeoDataFrame | tuple[list, str | int | pyproj.crs.crs.CRS],
         var: str,
         side: int | float,
         buffer: int | float = None)\
@@ -284,13 +293,13 @@ def cells_delimit(
     if isinstance(extent, tuple):  # if extent is a tuple...
         x_min, y_min, x_max, y_max = extent[0]  # ...get the min and max x and y values
         crs = extent[1]  # ...get the CRS
+        check_crs(par='extent', crs=crs)
     elif isinstance(extent, gpd.GeoDataFrame):  # if the extent is a GeoDataFrame...
         x_min, y_min, x_max, y_max = extent.total_bounds  # ...get the min and max x and y values
         crs = extent.crs  # ...get the CRS
     else:  # else if extent is neither tuple nor GeoDataFrame (should never be reached given check_dtype() above)
         raise TypeError
-
-    check_crs(par='extent CRS', crs=crs, projected=True)
+    check_projected(obj_name='extent', crs=crs)
 
     if buffer is not None:  # if a buffer is provided...
         check_dtype(par='buffer', obj=buffer, dtypes=[int, float])
@@ -354,7 +363,7 @@ def segments_delimit(
         -> gpd.GeoDataFrame:
 
     check_dtype(par='sections', obj=sections, dtypes=gpd.GeoDataFrame)
-    check_crs(par='sections CRS', crs=sections.crs, projected=True)
+    check_projected(obj_name='sections', crs=sections.crs)
     check_cols(sections, ['datetime', 'section_id'])
     check_dtype(par='var', obj=var, dtypes=str)
     var = var.lower()
@@ -632,11 +641,11 @@ def assign_segments(gdf: gpd.GeoDataFrame, segments: gpd.GeoDataFrame, how: str)
     check_opt(par='how', opt=how, opts=['line', 'midpoint', 'dfb'])
 
     geometry_col = gdf.geometry.name
-    crs = gdf.crs  # get datapoints CRS
+    crs = gdf.crs  # get CRS
     remove_cols(gdf, ['dfbsec_beg', 'segment_id'])  # remove columns, if present
 
     if how in ['line', 'midpoint']:
-        id_pairs_list = []  # a list for pairs of datapoint IDs and segment IDs
+        id_pairs_list = []  # a list for pairs of IDs and segment IDs
 
         if all(gdf['datetime']) and all(segments['date']):  # if GeoDataFrame has datetimes and segments have dates
             for datapoint_id, datapoint_datetime, datapoint_point in (  # for each datapoint, its datetime, and its geometry
