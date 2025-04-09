@@ -1,0 +1,4 @@
+# distribution folder
+.dist/
+# toml file
+pyproject.toml
