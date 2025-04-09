@@ -822,7 +822,7 @@ class Samples:
         return cls(
             samples=merged,
             name=name,
-            parameters={'names': '+'.join([sample.name for sample in kwargs.values()])} | parameters,
+            parameters={'name': name, 'names': '+'.join([sample.name for sample in kwargs.values()])} | parameters,
             assigned=None)
 
     def save(

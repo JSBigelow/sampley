@@ -794,9 +794,8 @@ def samples_point(datapoints: gpd.GeoDataFrame, presences: gpd.GeoDataFrame, abs
     presences['p-a'] = 1  # set presence-absence value
     absences['p-a'] = 0  # set presence-absence value
     samples = pd.concat([presences, absences]).reset_index(drop=True)  # concat presences and absences
-    samples = samples[['point_id', 'point', 'date', 'p-a'] +  # reorder columns
-                      [c for c in samples if c not in ['point_id', 'point', 'date', 'p-a', 'datapoint_id']] +
-                      ['datapoint_id']]
+    samples = samples[['point_id', 'point', 'date', 'datapoint_id', 'p-a'] +  # reorder columns
+                      [c for c in samples if c not in ['point_id', 'point', 'date', 'datapoint_id', 'p-a']]]
     samples = gpd.GeoDataFrame(samples, geometry='point', crs=datapoints.crs)  # GeoDataFrame
     return samples
 
