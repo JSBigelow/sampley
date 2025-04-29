@@ -169,10 +169,10 @@ def open_file(filepath: str) -> pd.DataFrame | gpd.GeoDataFrame:
                             '\nTypeError: the file is not of a valid type.'
                             f'\n  The file extension is {input_ext}'
                             '\nThe input file must be one of the following:'
+                            '\n  .gpkg - GeoPackage'
+                            '\n  .shp - ShapeFile (for DataPoints and Sections)'
                             '\n  .csv - CSV (for DataPoints only)'
                             '\n  .xlsx - Excel (for DataPoints only)'
-                            '\n  .gpkg - GeoPackage (for DataPoints and Sections)'
-                            '\n  .shp - ShapeFile (for DataPoints and Sections)'
                             '\n____________________')
         print('Success: file successfully input.')
         return df
@@ -218,11 +218,23 @@ def parse_geoms(df: pd.DataFrame, geometry_col: str, crs: str | int | pyproj.crs
     return gdf
 
 
-def reproject_crs(gdf: gpd.GeoSeries | gpd.GeoDataFrame, crs_target: str | int | pyproj.crs.crs.CRS):
+def reproject_crs(gdf: gpd.GeoSeries | gpd.GeoDataFrame, crs_target: str | int | pyproj.crs.crs.CRS | None, additional: str | list[str] = None):
     if crs_target is not None:
         crs_name = '\'' + crs_target + '\'' if isinstance(crs_target, str) else (
                 '\'' + str(crs_target) + '\'') if isinstance(crs_target, pyproj.crs.crs.CRS) else crs_target
         if crs_target != gdf.crs:
+            additional = [additional] if isinstance(additional, str) else additional
+            if isinstance(additional, list):
+                for geometry in additional:
+                    if geometry not in gdf:
+                        raise Exception('\n\n____________________'
+                                        f'\nKeyError: column \'{geometry}\' not found in DataFrame.'
+                                        '\n____________________')
+                    else:
+                        geometry_gs = gpd.GeoSeries(gdf[geometry]).set_crs(gdf.crs)  # get geometries as a GeoSeries
+                        geometry_gs = reproject_crs(gdf=geometry_gs, crs_target=crs_target)  # reproject
+                        gdf[geometry] = geometry_gs  # return to samples GeoDataFrame
+                        print(f'Success: column \'{geometry}\' reprojected to CRS {crs_name}')
             gdf = gdf.to_crs(crs_target)
             print(f'Success: reprojected to CRS {crs_name}')
         else:
@@ -250,7 +262,7 @@ def parse_dts(df: pd.DataFrame, datetime_col: str, datetime_format: str | None =
             '\n____________________')
     try:
         tz_col = str(df[datetime_col].dtype.tz)  # get timezone if there is one
-        print(f'Note: the timezone of column \'{datetime_col}\' is already set to \'{tz_col}\'.')
+        print(f'Note: the timezone of column \'{datetime_col}\' is set to \'{tz_col}\'.')
         if tz is not None:  # if there is already a timezone and a timezone is specified...
             if str(tz_col) != str(tz):  # ...and the two timezones are different, print a warning...
                 print(f'Warning: the timezone of column \'{datetime_col}\' is not equal to the specified timezone. '
@@ -267,24 +279,31 @@ def parse_dts(df: pd.DataFrame, datetime_col: str, datetime_format: str | None =
     return df
 
 
-def convert_tz(df: pd.DataFrame, datetime_col: str, tz_target: str | timezone | pytz.BaseTzInfo | None):
+def convert_tz(df: pd.DataFrame, datetime_cols: str | list[str], tz_target: str | timezone | pytz.BaseTzInfo | None):
     if tz_target is not None:
         tz_name = str(tz_target) if isinstance(tz_target, (timezone, pytz.BaseTzInfo)) else tz_target
-        try:
-            tz_current = str(df[datetime_col].dtype.tz)
-        except AttributeError:
-            raise AttributeError(
-                '\n\n____________________'
-                f'\nAttributeError: the column \'{datetime_col}\' does not have a timezone.'
-                f'\nPlease set the timezone before attempting to convert.'
-                f'\nNote: tz_input must be set if setting tz_working.'
-                '\n____________________')
-        if str(tz_target) != str(tz_current):
-            df[datetime_col] = df[datetime_col].dt.tz_convert(tz_target)
-            print(f'Success: column \'{datetime_col}\' converted to timezone \'{tz_name}\'')
-        else:
-            print(f'Note: conversion of column \'{datetime_col}\' to timezone \'{tz_name}\' is not necessary '
-                  f'as it is already in timezone \'{tz_name}\'.')
+        datetime_cols = [datetime_cols] if isinstance(datetime_cols, str) else datetime_cols
+        for datetime_col in datetime_cols:
+            if datetime_col not in df:
+                raise Exception('\n\n____________________'
+                                f'\nKeyError: column \'{datetime_col}\' not found in DataFrame.'
+                                '\n____________________')
+            else:
+                try:
+                    tz_current = str(df[datetime_col].dtype.tz)
+                except AttributeError:
+                    raise AttributeError(
+                        '\n\n____________________'
+                        f'\nAttributeError: the column \'{datetime_col}\' does not have a timezone.'
+                        f'\nPlease set the timezone before attempting to convert.'
+                        f'\nNote: tz_input must be set if setting tz_working.'
+                        '\n____________________')
+                if str(tz_target) != str(tz_current):
+                    df[datetime_col] = df[datetime_col].dt.tz_convert(tz_target)
+                    print(f'Success: column \'{datetime_col}\' converted to timezone \'{tz_name}\'')
+                else:
+                    print(f'Note: conversion of column \'{datetime_col}\' to timezone \'{tz_name}\' is not necessary '
+                          f'as it is already in timezone \'{tz_name}\'.')
     return df
 
 

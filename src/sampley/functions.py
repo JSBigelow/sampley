@@ -6,7 +6,6 @@ from collections import Counter
 from datetime import timedelta
 from functools import reduce
 import math
-import pyproj.exceptions
 from pyproj import Geod
 from shapely import Point, MultiPoint, LineString, MultiLineString, Polygon, line_locate_point
 from shapely.errors import GEOSException
@@ -949,33 +948,6 @@ def samples_merge(approach: str, **kwargs: pd.DataFrame):
 
 ##############################################################################################################
 # Stage 3: Output
-def reproject(gdf: gpd.GeoDataFrame, crs_output: str | int | pyproj.crs.crs.CRS) -> gpd.GeoDataFrame:
-
-    check_dtype(par='gdf', obj=gdf, dtypes=gpd.GeoDataFrame)
-    check_dtype(par='crs_output', obj=crs_output, dtypes=[str, int, pyproj.crs.crs.CRS])
-    check_crs(par='crs_output', crs=crs_output)
-
-    for geometry in ['centroid', 'midpoint']:  # for each additional geometry
-        if geometry in gdf:  # if it is in samples
-            geometry_gs = gpd.GeoSeries(gdf[geometry]).set_crs(gdf.crs)  # get geometries as a GeoSeries
-            geometry_gs = reproject_crs(gdf=geometry_gs, crs_target=crs_output)  # reproject
-            gdf[geometry] = geometry_gs  # return to samples GeoDataFrame
-    gdf = reproject_crs(gdf=gdf, crs_target=crs_output)  # reproject the main geometry
-    return gdf
-
-
-def convert(df: pd.DataFrame, tz_output: str | timezone | pytz.BaseTzInfo) -> pd.DataFrame:
-
-    check_dtype(par='df', obj=df, dtypes=pd.DataFrame)
-    check_dtype(par='tz_output', obj=tz_output, dtypes=[str, timezone, pytz.BaseTzInfo])
-    check_tz(par='tz_output', tz=tz_output)
-
-    for datetime_col in ['datetime', 'datetime_beg', 'datetime_mid', 'datetime_end']:  # for each datetime column
-        if datetime_col in df:  # if it is in the DataFrame
-            df = convert_tz(df=df, datetime_col=datetime_col, tz_target=tz_output)
-    return df
-
-
 def extract(samples: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
     if samples.crs.axis_info[0].unit_name == 'degree':

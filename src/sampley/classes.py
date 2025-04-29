@@ -59,23 +59,64 @@ class DataPoints:
                 'datapoints_tz': tz,
                 'datapoints_data_cols': data_cols})
 
+    @classmethod
+    def open(cls, folder: str, basename: str,
+             crs_working: str | int | pyproj.crs.crs.CRS = None,
+             tz_working: str | timezone | pytz.BaseTzInfo | None = None):
+
+        input_datapoints = open_file(folder + basename + '.gpkg')
+        input_datapoints = input_datapoints[['datapoint_id', 'geometry', 'datetime'] +
+                                            [c for c in input_datapoints if c not in
+                                             ['datapoint_id', 'geometry', 'datetime']]]
+        try:
+            input_parameters = open_file(folder + basename + '-parameters.csv')
+            input_parameters = input_parameters.set_index('parameter').T.to_dict('records')[0]
+        except FileNotFoundError:
+            print('Warning: parameters not found. An empty parameters attribute will be made.')
+            input_parameters = {}
+
+        if crs_working is not None:  # if CRS provided
+            check_crs(par='crs_working', crs=crs_working)
+            input_datapoints = reproject_crs(input_datapoints, crs_working)  # reproject
+            input_parameters['datapoints_crs'] = str(crs_working)  # update parameter
+
+        if isinstance(input_datapoints['datetime'].iloc[0], str):
+            parse_dts(input_datapoints, 'datetime')
+            if tz_working is not None:  # if TZ provided
+                check_tz(par='tz_working', tz=tz_working)
+                input_datapoints = convert_tz(input_datapoints, 'datetime', tz_working)  # convert
+                input_parameters['datapoints_tz'] = str(tz_working)  # update parameter
+
+        return cls(datapoints=input_datapoints, name=basename, parameters=input_parameters)
+
     def plot(self, sections=None):
         fig, ax = plt.subplots(figsize=(16, 8))
         datapoints_plot(ax, self.datapoints)
         sections_plot(ax, sections.sections) if isinstance(sections, Sections) else None
 
-    def save(self, folder, filetype: str = 'gpkg'):
+    def save(self, folder,
+             crs_output: str | int | pyproj.crs.crs.CRS = None, tz_output: str | timezone | pytz.BaseTzInfo = None):
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        check_dtype(par='filetype', obj=filetype, dtypes=str)
-        filetype = filetype.lower()
-        check_opt(par='filetype', opt=filetype, opts=['csv', 'gpkg', 'both'])
+        output_datapoints = self.datapoints.copy()  # copy datapoints GeoDataFrame
+        output_parameters = self.parameters.copy()  # copy parameters
 
-        datapoints = self.datapoints.copy()
-        datapoints['datetime'] = datapoints['datetime'].apply(lambda dt: dt.strftime('%Y-%m-%d %H:%M:%S') if dt else 'None')
-        datapoints.to_csv(folder + '/' + self.name + '.csv', index=False) if filetype in ['csv', 'both'] else None
-        datapoints.to_file(folder + '/' + self.name + '.gpkg') if filetype in ['gpkg', 'both'] else None
+        if crs_output is not None:  # if CRS provided
+            check_crs(par='crs_output', crs=crs_output)
+            output_datapoints = reproject_crs(output_datapoints, crs_output)  # reproject
+            output_parameters['datapoints_crs'] = str(crs_output)  # update parameter
+        if tz_output is not None:  # if TZ provided
+            check_tz(par='tz_output', tz=tz_output)
+            output_datapoints = convert_tz(output_datapoints, 'datetime', tz_output)  # convert
+            output_parameters['datapoints_tz'] = str(tz_output)  # update parameter
+        output_datapoints['datetime'] = output_datapoints['datetime'].apply(  # convert datetime to string if datetime
+            lambda dt: str(dt) if isinstance(dt, (datetime | pd.Timestamp)) else dt)
+        output_datapoints.to_file(folder + '/' + self.name + '.gpkg')  # output datapoints as GPKG
+
+        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
+        output_parameters.columns = ['parameter', 'value']  # rename columns
+        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
 
 
 class Sections:
@@ -143,23 +184,63 @@ class Sections:
                 'sections_crs': datapoints.parameters['datapoints_crs'],
                 'sections_tz': datapoints.parameters['datapoints_tz']})
 
+    @classmethod
+    def open(cls, folder: str, basename: str,
+             crs_working: str | int | pyproj.crs.crs.CRS = None,
+             tz_working: str | timezone | pytz.BaseTzInfo | None = None):
+
+        input_sections = open_file(folder + basename + '.gpkg')
+        input_sections = input_sections[['section_id', 'geometry', 'datetime'] +
+                                        [c for c in input_sections if c not in ['section_id', 'geometry', 'datetime']]]
+        try:
+            input_parameters = open_file(folder + basename + '-parameters.csv')
+            input_parameters = input_parameters.set_index('parameter').T.to_dict('records')[0]
+        except FileNotFoundError:
+            print('Warning: parameters not found. An empty parameters attribute will be made.')
+            input_parameters = {}
+
+        if crs_working is not None:  # if CRS provided
+            check_crs(par='crs_working', crs=crs_working)
+            input_sections = reproject_crs(input_sections, crs_working)  # reproject
+            input_parameters['sections_crs'] = str(crs_working)  # update parameter
+
+        if isinstance(input_sections['datetime'].iloc[0], str):
+            parse_dts(input_sections, 'datetime')
+            if tz_working is not None:  # if TZ provided
+                check_tz(par='tz_working', tz=tz_working)
+                input_sections = convert_tz(input_sections, 'datetime', tz_working)  # convert
+                input_parameters['sections_tz'] = str(tz_working)  # update parameter
+
+        return cls(sections=input_sections, name=basename, parameters=input_parameters)
+
     def plot(self, datapoints=None):
         fig, ax = plt.subplots(figsize=(16, 8))
         sections_plot(ax, self.sections)
         datapoints_plot(ax, datapoints.datapoints) if isinstance(datapoints, DataPoints) else None
 
-    def save(self, folder, filetype: str = 'gpkg'):
+    def save(self, folder,
+             crs_output: str | int | pyproj.crs.crs.CRS = None, tz_output: str | timezone | pytz.BaseTzInfo = None):
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        check_dtype(par='filetype', obj=filetype, dtypes=str)
-        filetype = filetype.lower()
-        check_opt(par='filetype', opt=filetype, opts=['csv', 'gpkg', 'both'])
+        output_sections = self.sections.copy()  # copy sections GeoDataFrame
+        output_parameters = self.parameters.copy()  # copy parameters
 
-        sections = self.sections.copy()
-        sections['datetime'] = sections['datetime'].apply(lambda dt: dt.strftime('%Y-%m-%d %H:%M:%S') if dt else 'None')
-        sections.to_csv(folder + '/' + self.name + '.csv', index=False) if filetype in ['csv', 'both'] else None
-        sections.to_file(folder + '/' + self.name + '.gpkg') if filetype in ['gpkg', 'both'] else None
+        if crs_output is not None:  # if CRS provided
+            check_crs(par='crs_output', crs=crs_output)
+            output_sections = reproject_crs(output_sections, crs_output)  # reproject
+            output_parameters['sections_crs'] = str(crs_output)  # update parameter
+        if tz_output is not None:  # if TZ provided
+            check_tz(par='tz_output', tz=tz_output)
+            output_sections = convert_tz(output_sections, 'datetime', tz_output)  # convert
+            output_parameters['sections_tz'] = str(tz_output)  # update parameter
+        output_sections['datetime'] = output_sections['datetime'].apply(  # convert datetime to string if datetime
+            lambda dt: str(dt) if isinstance(dt, (datetime | pd.Timestamp)) else dt)
+        output_sections.to_file(folder + '/' + self.name + '.gpkg')  # output sections as GPKG
+
+        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
+        output_parameters.columns = ['parameter', 'value']  # rename columns
+        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
 
 
 ##############################################################################################################
@@ -214,18 +295,38 @@ class Periods:
                 'periods_number': num,
                 'periods_unit': unit})
 
-    def save(self, folder: str, tz_output: str | timezone | pytz.BaseTzInfo = None):
+    @classmethod
+    def open(cls, folder: str, basename: str):
+
+        input_periods = open_file(folder + basename + '.csv')
+        input_periods['datetime_beg'] = pd.to_datetime(input_periods['datetime_beg'])
+        input_periods['datetime_mid'] = pd.to_datetime(input_periods['datetime_mid'])
+        input_periods['datetime_end'] = pd.to_datetime(input_periods['datetime_end'])
+
+        try:
+            input_parameters = open_file(folder + basename + '-parameters.csv')
+            input_parameters = input_parameters.set_index('parameter').T.to_dict('records')[0]
+        except FileNotFoundError:
+            print('Warning: parameters not found. An empty parameters attribute will be made.')
+            input_parameters = {}
+
+        return cls(periods=input_periods, name=basename, parameters=input_parameters)
+
+    def save(self, folder: str):
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        output_periods = self.periods.copy()
-        if tz_output is not None:
-            check_tz(par='tz_output', tz=tz_output)
-            output_periods = convert(output_periods, tz_output)
-        for col in ['datetime_beg', 'datetime_mid', 'datetime_end']:
-            if col in output_periods:
-                output_periods[col] = output_periods[col].apply(lambda dt: dt.strftime('%Y-%m-%d %H:%M:%S') if dt else 'None')
-        output_periods.to_csv(folder + '/' + self.name + '.csv', index=False)
+        output_periods = self.periods.copy()  # copy dataframe
+        output_parameters = self.parameters.copy()  # copy parameters
+
+        for col in ['datetime_beg', 'datetime_mid', 'datetime_end']:  # for each potential datetime col...
+            output_periods[col] = output_periods[col].apply(  # convert datetime to string if there is datetime
+                lambda dt: str(dt) if isinstance(dt, (datetime | pd.Timestamp)) else dt)
+        output_periods.to_csv(folder + '/' + self.name + '.csv', index=False)  # output to CSV
+
+        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
+        output_parameters.columns = ['parameter', 'value']  # rename columns
+        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
 
 
 class Cells:
@@ -270,6 +371,35 @@ class Cells:
                 'cells_unit': unit,
                 'cells_buffer': buffer})
 
+    @classmethod
+    def open(cls, folder: str, basename: str, crs_working: str | int | pyproj.crs.crs.CRS = None):
+
+        polygons = open_file(folder + basename + '-polygons.gpkg')
+        polygons.rename_geometry('polygon', inplace=True)
+        try:
+            centroids = open_file(folder + basename + '-centroids.gpkg')
+            centroids.rename_geometry('centroid', inplace=True)
+            input_cells = pd.merge(polygons, centroids, on='cell_id')
+        except FileNotFoundError:
+            print('Warning: centroids not found. Cells object will be made without centroids.')
+            input_cells = polygons
+            input_cells['centroid'] = None
+
+        try:
+            input_parameters = open_file(folder + basename + '-parameters.csv')
+            input_parameters = input_parameters.set_index('parameter').T.to_dict('records')[0]
+        except FileNotFoundError:
+            print('Warning: parameters not found. An empty parameters attribute will be made.')
+            input_parameters = {}
+
+        if crs_working is not None:  # if CRS provided
+            check_crs(par='crs_working', crs=crs_working)
+            input_cells = reproject_crs(input_cells, crs_working, 'centroid')  # reproject
+            input_parameters['cells_crs'] = str(crs_working)  # update parameter
+
+        return cls(cells=input_cells, name=basename, parameters=input_parameters)
+
+
     def plot(self, datapoints: DataPoints = None, sections: Sections = None):
         fig, ax = plt.subplots(figsize=(16, 8))
         cells_plot(ax, self.cells)
@@ -280,13 +410,20 @@ class Cells:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        output_cells = self.cells.copy()
-        if crs_output is not None:
-            check_crs(par='crs_output', crs=crs_output)
-            output_cells = reproject(output_cells, crs_output)
+        output_cells = self.cells.copy()  # copy cells GeoDataFrame
+        output_parameters = self.parameters.copy()  # copy parameters
 
-        output_cells[['cell_id', 'polygon']].to_file(folder + '/' + self.name + '-polygons.gpkg')
-        output_cells[['cell_id', 'centroid']].to_file(folder + '/' + self.name + '-centroids.gpkg')
+        if crs_output is not None:  # if CRS provided
+            check_crs(par='crs_output', crs=crs_output)
+            output_cells = reproject_crs(output_cells, crs_output, 'centroid')  # reproject
+            output_parameters['cells_crs'] = str(crs_output)  # update parameter
+
+        output_cells[['cell_id', 'polygon']].to_file(folder + '/' + self.name + '-polygons.gpkg')  # output polygons
+        output_cells[['cell_id', 'centroid']].to_file(folder + '/' + self.name + '-centroids.gpkg')  # output centroids
+
+        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
+        output_parameters.columns = ['parameter', 'value']  # rename columns
+        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
 
 
 class Segments:
@@ -322,6 +459,34 @@ class Segments:
                 'segments_target': target,
                 'segments_unit': unit})
 
+    @classmethod
+    def open(cls, folder: str, basename: str, crs_working: str | int | pyproj.crs.crs.CRS = None):
+
+        lines = open_file(folder + basename + '-lines.gpkg')
+        lines.rename_geometry('line', inplace=True)
+        try:
+            midpoints = open_file(folder + basename + '-midpoints.gpkg')
+            midpoints.rename_geometry('midpoint', inplace=True)
+            input_segments = pd.merge(lines, midpoints, on='segment_id')
+        except FileNotFoundError:
+            print('Warning: midpoints not found. Segments object will be made without midpoints.')
+            input_segments = lines
+            input_segments['midpoint'] = None
+
+        try:
+            input_parameters = open_file(folder + basename + '-parameters.csv')
+            input_parameters = input_parameters.set_index('parameter').T.to_dict('records')[0]
+        except FileNotFoundError:
+            print('Warning: parameters not found. An empty parameters attribute will be made.')
+            input_parameters = {}
+
+        if crs_working is not None:  # if CRS provided
+            check_crs(par='crs_working', crs=crs_working)
+            input_segments = reproject_crs(input_segments, crs_working, 'midpoint')  # reproject
+            input_parameters['cells_crs'] = str(crs_working)  # update parameter
+
+        return cls(segments=input_segments, name=basename, parameters=input_parameters)
+
     def plot(self, sections: Sections = None, datapoints: DataPoints = None):
         fig, ax = plt.subplots(figsize=(16, 8))
         segments_plot(ax, self.segments)
@@ -332,20 +497,27 @@ class Segments:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        output_segments = self.segments.copy()
-        if crs_output is not None:
-            check_crs(par='crs_output', crs=crs_output)
-            output_segments = reproject(output_segments, crs_output)
+        output_segments = self.segments.copy()  # copy segments GeoDataFrame
+        output_parameters = self.parameters.copy()  # copy parameters
 
-        output_segments[['segment_id', 'line']].to_file(folder + '/' + self.name + '-lines.gpkg')
-        output_segments[['segment_id', 'midpoint']].to_file(folder + '/' + self.name + '-midpoints.gpkg')
+        if crs_output is not None:  # if CRS provided
+            check_crs(par='crs_output', crs=crs_output)
+            output_segments = reproject_crs(output_segments, crs_output, 'midpoint')  # reproject
+            output_parameters['segments_crs'] = str(crs_output)  # update parameter
+
+        output_segments[['segment_id', 'line']].to_file(folder + '/' + self.name + '-lines.gpkg')  # output lines
+        output_segments[['segment_id', 'midpoint']].to_file(folder + '/' + self.name + '-midpoints.gpkg')  # output midpoints
+
+        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
+        output_parameters.columns = ['parameter', 'value']  # rename columns
+        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
 
 
 class Presences:
-    def __init__(self, full, name, parameters):
+    def __init__(self, full, kept, removed, name, parameters):
         self.full = full
-        self.kept = None
-        self.removed = None
+        self.kept = kept
+        self.removed = removed
         self.name = name
         self.parameters = parameters
 
@@ -362,8 +534,46 @@ class Presences:
         crs = full.crs
         return cls(
             full=full,
+            kept=None,
+            removed=None,
             name='presences-' + datapoints.name[11:],
             parameters={'presences_crs': str(crs)})
+
+    @classmethod
+    def open(cls, folder: str, basename: str, crs_working: str | int | pyproj.crs.crs.CRS = None):
+        full = open_file(folder + basename + '-full.gpkg')
+        full.rename_geometry('point', inplace=True)
+        full = full[['point_id', 'point', 'date', 'datapoint_id']]
+        try:
+            kept = open_file(folder + basename + '-kept.gpkg')
+            kept.rename_geometry('point', inplace=True)
+            kept = kept[['point_id', 'point', 'date', 'datapoint_id']]
+        except FileNotFoundError:
+            print('Warning: kept points not found. Presences object will be made without kept attribute.')
+            kept = None
+        try:
+            removed = open_file(folder + basename + '-removed.gpkg')
+            removed.rename_geometry('point', inplace=True)
+            removed = removed[['point_id', 'point', 'date', 'datapoint_id']]
+        except FileNotFoundError:
+            print('Warning: removed points not found. Presences object will be made without removed attribute.')
+            removed = None
+
+        try:
+            input_parameters = open_file(folder + basename + '-parameters.csv')
+            input_parameters = input_parameters.set_index('parameter').T.to_dict('records')[0]
+        except FileNotFoundError:
+            print('Warning: parameters not found. An empty parameters attribute will be made.')
+            input_parameters = {}
+
+        if crs_working is not None:  # if CRS provided
+            check_crs(par='crs_working', crs=crs_working)
+            full = reproject_crs(full, crs_working)  # reproject
+            kept = reproject_crs(kept, crs_working) if isinstance(kept, gpd.GeoDataFrame) else None
+            removed = reproject_crs(removed, crs_working) if isinstance(removed, gpd.GeoDataFrame) else None
+            input_parameters['presences_crs'] = str(crs_working)  # update parameter
+
+        return cls(full=full, kept=kept, removed=removed, name=basename, parameters=input_parameters)
 
     def thin(
             self,
@@ -415,23 +625,36 @@ class Presences:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        output_full = self.full.copy()
-        if crs_output is not None:
+        output_full = self.full.copy()  # copy full presences GeoDataFrame
+        output_parameters = self.parameters.copy()  # copy parameters
+
+        if crs_output is not None:  # if an output CRS is provided
             check_crs(par='crs_output', crs=crs_output)
-            output_full = reproject(output_full, crs_output)
-        output_full.to_file(folder + '/' + self.name + '-full.gpkg')
+            output_full = reproject_crs(output_full, crs_output)  # reproject
+            output_parameters['presences_crs'] = str(crs_output)  # update parameter
+        output_full['date'] = output_full['date'].apply(  # convert date to string if datetime
+            lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
+        output_full.to_file(folder + '/' + self.name + '-full.gpkg')  # output full presences
 
-        if isinstance(self.kept, gpd.GeoDataFrame):
-            output_kept = self.kept.copy()
-            if crs_output is not None:
-                output_kept = reproject(output_kept, crs_output)
-            output_kept.to_file(folder + '/' + self.name + '-kept.gpkg')
+        if isinstance(self.kept, gpd.GeoDataFrame):  # if kept presences...
+            output_kept = self.kept.copy()  # copy kept presences GeoDataFrame
+            if crs_output is not None:  # if an output CRS is provided
+                output_kept = reproject_crs(output_kept, crs_output)  # reproject
+            output_kept['date'] = output_kept['date'].apply(  # convert date to string if datetime
+                lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
+            output_kept.to_file(folder + '/' + self.name + '-kept.gpkg')  # output kept presences
 
-        if isinstance(self.removed, gpd.GeoDataFrame):
-            output_removed = self.removed.copy()
-            if crs_output is not None:
-                output_removed = reproject(output_removed, crs_output)
-            output_removed.to_file(folder + '/' + self.name + '-removed.gpkg')
+        if isinstance(self.removed, gpd.GeoDataFrame):  # if removed presences...
+            output_removed = self.removed.copy()  # copy removed presences GeoDataFrame
+            if crs_output is not None:  # if an output CRS is provided
+                output_removed = reproject_crs(output_removed, crs_output)  # reproject
+            output_removed['date'] = output_removed['date'].apply(  # convert date to string if datetime
+                lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
+            output_removed.to_file(folder + '/' + self.name + '-removed.gpkg')  # output removed presences
+
+        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
+        output_parameters.columns = ['parameter', 'value']  # rename columns
+        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
 
 
 class AbsenceLines:
@@ -473,6 +696,33 @@ class AbsenceLines:
                 'absences_tm_threshold': tm_threshold,
                 'absences_tm_unit': tm_unit})
 
+    @classmethod
+    def open(cls, folder: str, basename: str, crs_working: str | int | pyproj.crs.crs.CRS = None):
+
+        input_absencelines = open_file(folder + basename + '-absencelines.gpkg')
+        input_absencelines.rename_geometry('absenceline', inplace=True)
+        try:
+            presencezones = open_file(folder + basename + '-presencezones.gpkg')
+            presencezones.rename_geometry('presencezones', inplace=True)
+            input_absencelines = pd.merge(input_absencelines, presencezones[['section_id', 'presencezones']], on='section_id')
+        except FileNotFoundError:
+            print('Warning: presence zones not found. AbsenceLines object will be made without presence zones.')
+            input_absencelines['presencezones'] = None
+
+        try:
+            input_parameters = open_file(folder + basename + '-parameters.csv')
+            input_parameters = input_parameters.set_index('parameter').T.to_dict('records')[0]
+        except FileNotFoundError:
+            print('Warning: parameters not found. An empty parameters attribute will be made.')
+            input_parameters = {}
+
+        if crs_working is not None:  # if CRS provided
+            check_crs(par='crs_working', crs=crs_working)
+            input_absencelines = reproject_crs(input_absencelines, crs_working, 'presencezones')  # reproject
+            input_parameters['absences_crs'] = str(crs_working)  # update parameter
+
+        return cls(absencelines=input_absencelines, name=basename, parameters=input_parameters)
+
     def plot(self, sections: Sections = None, presences: Presences = None):
         fig, ax = plt.subplots(figsize=(16, 8))
         absencelines_plot(ax, self.absencelines)
@@ -483,20 +733,29 @@ class AbsenceLines:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        output_lines = self.absencelines.copy()
-        if crs_output is not None:
-            check_crs(par='crs_output', crs=crs_output)
-            output_lines = reproject(output_lines, crs_output)
+        output_lines = self.absencelines.copy()  # copy absence lines GeoDataFrame
+        output_parameters = self.parameters.copy()  # copy parameters
 
-        output_lines[['section_id', 'date', 'absencelines']].to_file(folder + '/' + self.name + '-absencelines.gpkg')
-        output_lines[['section_id', 'date', 'presencezones']].to_file(folder + '/' + self.name + '-presencezones.gpkg')
+        if crs_output is not None:  # if an output CRS is provided
+            check_crs(par='crs_output', crs=crs_output)
+            output_lines = reproject_crs(output_lines, crs_output, 'presencezones')  # reproject
+            output_parameters['absences_crs'] = str(crs_output)  # update parameter
+        output_lines['date'] = output_lines['date'].apply(  # convert date to string if datetime
+            lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
+
+        output_lines[['section_id', 'date', 'absencelines']].to_file(folder + '/' + self.name + '-absencelines.gpkg')  # output absence lines
+        output_lines[['section_id', 'date', 'presencezones']].to_file(folder + '/' + self.name + '-presencezones.gpkg')  # output presence zones
+
+        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
+        output_parameters.columns = ['parameter', 'value']  # rename columns
+        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
 
 
 class Absences:
-    def __init__(self, full, name, parameters):
+    def __init__(self, full, kept, removed, name, parameters):
         self.full = full
-        self.kept = None
-        self.removed = None
+        self.kept = kept
+        self.removed = removed
         self.name = name
         self.parameters = parameters
 
@@ -516,8 +775,46 @@ class Absences:
 
         return cls(
             full=full,
+            kept=None,
+            removed=None,
             name='absences-' + var[0] + absencelines.name[12:],
             parameters={'absences_var': var, 'absences_target': target} | absencelines.parameters)
+
+    @classmethod
+    def open(cls, folder: str, basename: str, crs_working: str | int | pyproj.crs.crs.CRS = None):
+        full = open_file(folder + basename + '-full.gpkg')
+        full.rename_geometry('point', inplace=True)
+        full = full[['point_id', 'point', 'date']]
+        try:
+            kept = open_file(folder + basename + '-kept.gpkg')
+            kept.rename_geometry('point', inplace=True)
+            kept = kept[['point_id', 'point', 'date']]
+        except FileNotFoundError:
+            print('Warning: kept points not found. Absences object will be made without kept attribute.')
+            kept = None
+        try:
+            removed = open_file(folder + basename + '-removed.gpkg')
+            removed.rename_geometry('point', inplace=True)
+            removed = removed[['point_id', 'point', 'date']]
+        except FileNotFoundError:
+            print('Warning: removed points not found. Absences object will be made without removed attribute.')
+            removed = None
+
+        try:
+            input_parameters = open_file(folder + basename + '-parameters.csv')
+            input_parameters = input_parameters.set_index('parameter').T.to_dict('records')[0]
+        except FileNotFoundError:
+            print('Warning: parameters not found. An empty parameters attribute will be made.')
+            input_parameters = {}
+
+        if crs_working is not None:  # if CRS provided
+            check_crs(par='crs_working', crs=crs_working)
+            full = reproject_crs(full, crs_working)  # reproject
+            kept = reproject_crs(kept, crs_working) if isinstance(kept, gpd.GeoDataFrame) else None
+            removed = reproject_crs(removed, crs_working) if isinstance(removed, gpd.GeoDataFrame) else None
+            input_parameters['absences_crs'] = str(crs_working)  # update parameter
+
+        return cls(full=full, kept=kept, removed=removed, name=basename, parameters=input_parameters)
 
     def thin(
             self,
@@ -570,23 +867,36 @@ class Absences:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        output_full = self.full.copy()
-        if crs_output is not None:
+        output_full = self.full.copy()  # copy full presences GeoDataFrame
+        output_parameters = self.parameters.copy()  # copy parameters
+
+        if crs_output is not None:  # if an output CRS is provided
             check_crs(par='crs_output', crs=crs_output)
-            output_full = reproject(output_full, crs_output)
-        output_full.to_file(folder + '/' + self.name + '-full.gpkg')
+            output_full = reproject_crs(output_full, crs_output)  # reproject
+            output_parameters['absences_crs'] = str(crs_output)  # update parameter
+        output_full['date'] = output_full['date'].apply(  # convert date to string if datetime
+            lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
+        output_full.to_file(folder + '/' + self.name + '-full.gpkg')  # output full presences
 
-        if isinstance(self.kept, gpd.GeoDataFrame):
-            output_kept = self.kept.copy()
-            if crs_output is not None:
-                output_kept = reproject(output_kept, crs_output)
-            output_kept.to_file(folder + '/' + self.name + '-kept.gpkg')
+        if isinstance(self.kept, gpd.GeoDataFrame):  # if kept presences...
+            output_kept = self.kept.copy()  # copy kept presences GeoDataFrame
+            if crs_output is not None:  # if an output CRS is provided
+                output_kept = reproject_crs(output_kept, crs_output)  # reproject
+            output_kept['date'] = output_kept['date'].apply(  # convert date to string if datetime
+                lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
+            output_kept.to_file(folder + '/' + self.name + '-kept.gpkg')  # output kept presences
 
-        if isinstance(self.removed, gpd.GeoDataFrame):
-            output_removed = self.removed.copy()
-            if crs_output is not None:
-                output_removed = reproject(output_removed, crs_output)
-            output_removed.to_file(folder + '/' + self.name + '-removed.gpkg')
+        if isinstance(self.removed, gpd.GeoDataFrame):  # if removed presences...
+            output_removed = self.removed.copy()  # copy removed presences GeoDataFrame
+            if crs_output is not None:  # if an output CRS is provided
+                output_removed = reproject_crs(output_removed, crs_output)  # reproject
+            output_removed['date'] = output_removed['date'].apply(  # convert date to string if datetime
+                lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
+            output_removed.to_file(folder + '/' + self.name + '-removed.gpkg')  # output removed presences
+
+        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
+        output_parameters.columns = ['parameter', 'value']  # rename columns
+        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
 
 
 ##############################################################################################################
@@ -845,18 +1155,18 @@ class Samples:
 
         if crs_output is not None:  # if CRS provided
             check_crs(par='crs_output', crs=crs_output)
-            output_samples = reproject(output_samples, crs_output)  # reproject
+            output_samples = reproject_crs(output_samples, crs_output, ['centroid', 'midpoint'])  # reproject
             output_parameters['samples_crs'] = str(crs_output)  # update parameter
         output_samples = extract(samples=output_samples) if coords else output_samples  # extract coords (if coords)
 
         if tz_output is not None:  # if TZ provided
             check_tz(par='tz_output', tz=tz_output)
-            output_samples = convert(output_samples, tz_output)  # convert
+            output_samples = convert_tz(output_samples, ['datetime', 'datetime_beg', 'datetime_mid', 'datetime_end'], tz_output)  # convert
             output_parameters['samples_tz'] = str(tz_output)  # update parameter
         for col in ['datetime', 'datetime_beg', 'datetime_mid', 'datetime_end']:  # for each potential datetime col...
             if col in output_samples:  # ...if present...
                 output_samples[col] = output_samples[col].apply(  # convert datetime to string if there is datetime
-                    lambda dt: dt.strftime('%Y-%m-%d %H:%M:%S') if dt else 'None')
+                    lambda dt: dt.strftime('%Y-%m-%d %H:%M:%S') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
 
         if filetype in ['csv', 'both']:  # if CSV
             output_samples.to_csv(folder + '/' + self.name + '.csv', index=False)  # output
@@ -866,6 +1176,7 @@ class Samples:
                     output_samples[col] = output_samples[col].to_wkt()  # ...convert to wkt
             output_samples.to_file(folder + '/' + self.name + '.gpkg')  # output
 
-        parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T  # parameters dataframe
-        parameters.to_csv(folder + '/' + self.name + '-parameters.csv')  # output parameters
+        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
+        output_parameters.columns = ['parameter', 'value']  # rename columns
+        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
 
