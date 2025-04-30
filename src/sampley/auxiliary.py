@@ -98,6 +98,7 @@ def check_crs(par: str, crs: str | int | pyproj.crs.crs.CRS, none_allowed: bool 
 
 # check that a CRS is projected (assumed that check_crs() has been run prior)
 def check_projected(obj_name: str, crs: str | int | pyproj.crs.crs.CRS) -> None:
+    crs = CRS(crs) if isinstance(crs, (str, int)) else crs
     if not crs.is_projected:  # if the CRS is not projected
         if isinstance(crs, pyproj.crs.crs.CRS):
             crs_name = '\'' + str(crs) + '\''  # get its name

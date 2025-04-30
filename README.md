@@ -1,7 +1,7 @@
 # sampley: sample survey data
 
 ## Description
-The ```sampley``` package serves to sample survey data (hence 'sampley'; sample + survey). By 'survey data', we refer 
+The ```sampley``` package serves to sample survey data (hence 'sampley': 'sample' + 'survey'). By 'survey data', we refer 
 principally to systematic visual survey data, nevertheless, the ```sampley``` package may also be applicable to other 
 kinds of survey data. By 'sample', we mean process those data to produce distinct samples that can then be input to a 
 model. 

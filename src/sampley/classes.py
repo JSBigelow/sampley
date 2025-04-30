@@ -64,6 +64,9 @@ class DataPoints:
              crs_working: str | int | pyproj.crs.crs.CRS = None,
              tz_working: str | timezone | pytz.BaseTzInfo | None = None):
 
+        check_dtype(par='folder', obj=folder, dtypes=str)
+        folder = folder + '/' if folder[-1] != '/' else folder
+
         input_datapoints = open_file(folder + basename + '.gpkg')
         input_datapoints = input_datapoints[['datapoint_id', 'geometry', 'datetime'] +
                                             [c for c in input_datapoints if c not in
@@ -77,14 +80,14 @@ class DataPoints:
 
         if crs_working is not None:  # if CRS provided
             check_crs(par='crs_working', crs=crs_working)
-            input_datapoints = reproject_crs(input_datapoints, crs_working)  # reproject
+            input_datapoints = reproject_crs(gdf=input_datapoints, crs_target=crs_working)  # reproject
             input_parameters['datapoints_crs'] = str(crs_working)  # update parameter
 
         if isinstance(input_datapoints['datetime'].iloc[0], str):
             parse_dts(input_datapoints, 'datetime')
             if tz_working is not None:  # if TZ provided
                 check_tz(par='tz_working', tz=tz_working)
-                input_datapoints = convert_tz(input_datapoints, 'datetime', tz_working)  # convert
+                input_datapoints = convert_tz(df=input_datapoints, datetime_cols='datetime', tz_target=tz_working)  # convert
                 input_parameters['datapoints_tz'] = str(tz_working)  # update parameter
 
         return cls(datapoints=input_datapoints, name=basename, parameters=input_parameters)
@@ -95,7 +98,8 @@ class DataPoints:
         sections_plot(ax, sections.sections) if isinstance(sections, Sections) else None
 
     def save(self, folder,
-             crs_output: str | int | pyproj.crs.crs.CRS = None, tz_output: str | timezone | pytz.BaseTzInfo = None):
+             crs_output: str | int | pyproj.crs.crs.CRS = None,
+             tz_output: str | timezone | pytz.BaseTzInfo = None):
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
@@ -104,11 +108,11 @@ class DataPoints:
 
         if crs_output is not None:  # if CRS provided
             check_crs(par='crs_output', crs=crs_output)
-            output_datapoints = reproject_crs(output_datapoints, crs_output)  # reproject
+            output_datapoints = reproject_crs(gdf=output_datapoints, crs_target=crs_output)  # reproject
             output_parameters['datapoints_crs'] = str(crs_output)  # update parameter
         if tz_output is not None:  # if TZ provided
             check_tz(par='tz_output', tz=tz_output)
-            output_datapoints = convert_tz(output_datapoints, 'datetime', tz_output)  # convert
+            output_datapoints = convert_tz(df=output_datapoints, datetime_cols='datetime', tz_target=tz_output)  # convert
             output_parameters['datapoints_tz'] = str(tz_output)  # update parameter
         output_datapoints['datetime'] = output_datapoints['datetime'].apply(  # convert datetime to string if datetime
             lambda dt: str(dt) if isinstance(dt, (datetime | pd.Timestamp)) else dt)
@@ -189,6 +193,9 @@ class Sections:
              crs_working: str | int | pyproj.crs.crs.CRS = None,
              tz_working: str | timezone | pytz.BaseTzInfo | None = None):
 
+        check_dtype(par='folder', obj=folder, dtypes=str)
+        folder = folder + '/' if folder[-1] != '/' else folder
+
         input_sections = open_file(folder + basename + '.gpkg')
         input_sections = input_sections[['section_id', 'geometry', 'datetime'] +
                                         [c for c in input_sections if c not in ['section_id', 'geometry', 'datetime']]]
@@ -201,14 +208,14 @@ class Sections:
 
         if crs_working is not None:  # if CRS provided
             check_crs(par='crs_working', crs=crs_working)
-            input_sections = reproject_crs(input_sections, crs_working)  # reproject
+            input_sections = reproject_crs(gdf=input_sections, crs_target=crs_working)  # reproject
             input_parameters['sections_crs'] = str(crs_working)  # update parameter
 
         if isinstance(input_sections['datetime'].iloc[0], str):
             parse_dts(input_sections, 'datetime')
             if tz_working is not None:  # if TZ provided
                 check_tz(par='tz_working', tz=tz_working)
-                input_sections = convert_tz(input_sections, 'datetime', tz_working)  # convert
+                input_sections = convert_tz(df=input_sections, datetime_cols='datetime', tz_target=tz_working)  # convert
                 input_parameters['sections_tz'] = str(tz_working)  # update parameter
 
         return cls(sections=input_sections, name=basename, parameters=input_parameters)
@@ -219,7 +226,8 @@ class Sections:
         datapoints_plot(ax, datapoints.datapoints) if isinstance(datapoints, DataPoints) else None
 
     def save(self, folder,
-             crs_output: str | int | pyproj.crs.crs.CRS = None, tz_output: str | timezone | pytz.BaseTzInfo = None):
+             crs_output: str | int | pyproj.crs.crs.CRS = None,
+             tz_output: str | timezone | pytz.BaseTzInfo = None):
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
@@ -228,11 +236,11 @@ class Sections:
 
         if crs_output is not None:  # if CRS provided
             check_crs(par='crs_output', crs=crs_output)
-            output_sections = reproject_crs(output_sections, crs_output)  # reproject
+            output_sections = reproject_crs(gdf=output_sections, crs_target=crs_output)  # reproject
             output_parameters['sections_crs'] = str(crs_output)  # update parameter
         if tz_output is not None:  # if TZ provided
             check_tz(par='tz_output', tz=tz_output)
-            output_sections = convert_tz(output_sections, 'datetime', tz_output)  # convert
+            output_sections = convert_tz(df=output_sections, datetime_cols='datetime', tz_target=tz_output)  # convert
             output_parameters['sections_tz'] = str(tz_output)  # update parameter
         output_sections['datetime'] = output_sections['datetime'].apply(  # convert datetime to string if datetime
             lambda dt: str(dt) if isinstance(dt, (datetime | pd.Timestamp)) else dt)
@@ -297,6 +305,9 @@ class Periods:
 
     @classmethod
     def open(cls, folder: str, basename: str):
+
+        check_dtype(par='folder', obj=folder, dtypes=str)
+        folder = folder + '/' if folder[-1] != '/' else folder
 
         input_periods = open_file(folder + basename + '.csv')
         input_periods['datetime_beg'] = pd.to_datetime(input_periods['datetime_beg'])
@@ -374,6 +385,9 @@ class Cells:
     @classmethod
     def open(cls, folder: str, basename: str, crs_working: str | int | pyproj.crs.crs.CRS = None):
 
+        check_dtype(par='folder', obj=folder, dtypes=str)
+        folder = folder + '/' if folder[-1] != '/' else folder
+
         polygons = open_file(folder + basename + '-polygons.gpkg')
         polygons.rename_geometry('polygon', inplace=True)
         try:
@@ -394,7 +408,7 @@ class Cells:
 
         if crs_working is not None:  # if CRS provided
             check_crs(par='crs_working', crs=crs_working)
-            input_cells = reproject_crs(input_cells, crs_working, 'centroid')  # reproject
+            input_cells = reproject_crs(gdf=input_cells, crs_target=crs_working, additional='centroid')  # reproject
             input_parameters['cells_crs'] = str(crs_working)  # update parameter
 
         return cls(cells=input_cells, name=basename, parameters=input_parameters)
@@ -415,7 +429,7 @@ class Cells:
 
         if crs_output is not None:  # if CRS provided
             check_crs(par='crs_output', crs=crs_output)
-            output_cells = reproject_crs(output_cells, crs_output, 'centroid')  # reproject
+            output_cells = reproject_crs(gdf=output_cells, crs_target=crs_output, additional='centroid')  # reproject
             output_parameters['cells_crs'] = str(crs_output)  # update parameter
 
         output_cells[['cell_id', 'polygon']].to_file(folder + '/' + self.name + '-polygons.gpkg')  # output polygons
@@ -462,6 +476,9 @@ class Segments:
     @classmethod
     def open(cls, folder: str, basename: str, crs_working: str | int | pyproj.crs.crs.CRS = None):
 
+        check_dtype(par='folder', obj=folder, dtypes=str)
+        folder = folder + '/' if folder[-1] != '/' else folder
+
         lines = open_file(folder + basename + '-lines.gpkg')
         lines.rename_geometry('line', inplace=True)
         try:
@@ -482,7 +499,7 @@ class Segments:
 
         if crs_working is not None:  # if CRS provided
             check_crs(par='crs_working', crs=crs_working)
-            input_segments = reproject_crs(input_segments, crs_working, 'midpoint')  # reproject
+            input_segments = reproject_crs(gdf=input_segments, crs_target=crs_working, additional='midpoint')  # reproject
             input_parameters['cells_crs'] = str(crs_working)  # update parameter
 
         return cls(segments=input_segments, name=basename, parameters=input_parameters)
@@ -502,7 +519,7 @@ class Segments:
 
         if crs_output is not None:  # if CRS provided
             check_crs(par='crs_output', crs=crs_output)
-            output_segments = reproject_crs(output_segments, crs_output, 'midpoint')  # reproject
+            output_segments = reproject_crs(gdf=output_segments, crs_target=crs_output, additional='midpoint')  # reproject
             output_parameters['segments_crs'] = str(crs_output)  # update parameter
 
         output_segments[['segment_id', 'line']].to_file(folder + '/' + self.name + '-lines.gpkg')  # output lines
@@ -541,6 +558,10 @@ class Presences:
 
     @classmethod
     def open(cls, folder: str, basename: str, crs_working: str | int | pyproj.crs.crs.CRS = None):
+
+        check_dtype(par='folder', obj=folder, dtypes=str)
+        folder = folder + '/' if folder[-1] != '/' else folder
+
         full = open_file(folder + basename + '-full.gpkg')
         full.rename_geometry('point', inplace=True)
         full = full[['point_id', 'point', 'date', 'datapoint_id']]
@@ -568,9 +589,9 @@ class Presences:
 
         if crs_working is not None:  # if CRS provided
             check_crs(par='crs_working', crs=crs_working)
-            full = reproject_crs(full, crs_working)  # reproject
-            kept = reproject_crs(kept, crs_working) if isinstance(kept, gpd.GeoDataFrame) else None
-            removed = reproject_crs(removed, crs_working) if isinstance(removed, gpd.GeoDataFrame) else None
+            full = reproject_crs(gdf=full, crs_target=crs_working)  # reproject
+            kept = reproject_crs(gdf=kept, crs_target=crs_working) if isinstance(kept, gpd.GeoDataFrame) else None
+            removed = reproject_crs(gdf=removed, crs_target=crs_working) if isinstance(removed, gpd.GeoDataFrame) else None
             input_parameters['presences_crs'] = str(crs_working)  # update parameter
 
         return cls(full=full, kept=kept, removed=removed, name=basename, parameters=input_parameters)
@@ -630,7 +651,7 @@ class Presences:
 
         if crs_output is not None:  # if an output CRS is provided
             check_crs(par='crs_output', crs=crs_output)
-            output_full = reproject_crs(output_full, crs_output)  # reproject
+            output_full = reproject_crs(gdf=output_full, crs_target=crs_output)  # reproject
             output_parameters['presences_crs'] = str(crs_output)  # update parameter
         output_full['date'] = output_full['date'].apply(  # convert date to string if datetime
             lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
@@ -639,7 +660,7 @@ class Presences:
         if isinstance(self.kept, gpd.GeoDataFrame):  # if kept presences...
             output_kept = self.kept.copy()  # copy kept presences GeoDataFrame
             if crs_output is not None:  # if an output CRS is provided
-                output_kept = reproject_crs(output_kept, crs_output)  # reproject
+                output_kept = reproject_crs(gdf=output_kept, crs_target=crs_output)  # reproject
             output_kept['date'] = output_kept['date'].apply(  # convert date to string if datetime
                 lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
             output_kept.to_file(folder + '/' + self.name + '-kept.gpkg')  # output kept presences
@@ -647,7 +668,7 @@ class Presences:
         if isinstance(self.removed, gpd.GeoDataFrame):  # if removed presences...
             output_removed = self.removed.copy()  # copy removed presences GeoDataFrame
             if crs_output is not None:  # if an output CRS is provided
-                output_removed = reproject_crs(output_removed, crs_output)  # reproject
+                output_removed = reproject_crs(gdf=output_removed, crs_target=crs_output)  # reproject
             output_removed['date'] = output_removed['date'].apply(  # convert date to string if datetime
                 lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
             output_removed.to_file(folder + '/' + self.name + '-removed.gpkg')  # output removed presences
@@ -699,6 +720,9 @@ class AbsenceLines:
     @classmethod
     def open(cls, folder: str, basename: str, crs_working: str | int | pyproj.crs.crs.CRS = None):
 
+        check_dtype(par='folder', obj=folder, dtypes=str)
+        folder = folder + '/' if folder[-1] != '/' else folder
+
         input_absencelines = open_file(folder + basename + '-absencelines.gpkg')
         input_absencelines.rename_geometry('absenceline', inplace=True)
         try:
@@ -718,7 +742,7 @@ class AbsenceLines:
 
         if crs_working is not None:  # if CRS provided
             check_crs(par='crs_working', crs=crs_working)
-            input_absencelines = reproject_crs(input_absencelines, crs_working, 'presencezones')  # reproject
+            input_absencelines = reproject_crs(gdf=input_absencelines, crs_target=crs_working, additional='presencezones')  # reproject
             input_parameters['absences_crs'] = str(crs_working)  # update parameter
 
         return cls(absencelines=input_absencelines, name=basename, parameters=input_parameters)
@@ -738,7 +762,7 @@ class AbsenceLines:
 
         if crs_output is not None:  # if an output CRS is provided
             check_crs(par='crs_output', crs=crs_output)
-            output_lines = reproject_crs(output_lines, crs_output, 'presencezones')  # reproject
+            output_lines = reproject_crs(gdf=output_lines, crs_target=crs_output, additional='presencezones')  # reproject
             output_parameters['absences_crs'] = str(crs_output)  # update parameter
         output_lines['date'] = output_lines['date'].apply(  # convert date to string if datetime
             lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
@@ -782,6 +806,10 @@ class Absences:
 
     @classmethod
     def open(cls, folder: str, basename: str, crs_working: str | int | pyproj.crs.crs.CRS = None):
+
+        check_dtype(par='folder', obj=folder, dtypes=str)
+        folder = folder + '/' if folder[-1] != '/' else folder
+
         full = open_file(folder + basename + '-full.gpkg')
         full.rename_geometry('point', inplace=True)
         full = full[['point_id', 'point', 'date']]
@@ -809,9 +837,9 @@ class Absences:
 
         if crs_working is not None:  # if CRS provided
             check_crs(par='crs_working', crs=crs_working)
-            full = reproject_crs(full, crs_working)  # reproject
-            kept = reproject_crs(kept, crs_working) if isinstance(kept, gpd.GeoDataFrame) else None
-            removed = reproject_crs(removed, crs_working) if isinstance(removed, gpd.GeoDataFrame) else None
+            full = reproject_crs(gdf=full, crs_target=crs_working)  # reproject
+            kept = reproject_crs(gdf=kept, crs_target=crs_working) if isinstance(kept, gpd.GeoDataFrame) else None
+            removed = reproject_crs(gdf=removed, crs_target=crs_working) if isinstance(removed, gpd.GeoDataFrame) else None
             input_parameters['absences_crs'] = str(crs_working)  # update parameter
 
         return cls(full=full, kept=kept, removed=removed, name=basename, parameters=input_parameters)
@@ -872,7 +900,7 @@ class Absences:
 
         if crs_output is not None:  # if an output CRS is provided
             check_crs(par='crs_output', crs=crs_output)
-            output_full = reproject_crs(output_full, crs_output)  # reproject
+            output_full = reproject_crs(gdf=output_full, crs_target=crs_output)  # reproject
             output_parameters['absences_crs'] = str(crs_output)  # update parameter
         output_full['date'] = output_full['date'].apply(  # convert date to string if datetime
             lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
@@ -881,7 +909,7 @@ class Absences:
         if isinstance(self.kept, gpd.GeoDataFrame):  # if kept presences...
             output_kept = self.kept.copy()  # copy kept presences GeoDataFrame
             if crs_output is not None:  # if an output CRS is provided
-                output_kept = reproject_crs(output_kept, crs_output)  # reproject
+                output_kept = reproject_crs(gdf=output_kept, crs_target=crs_output)  # reproject
             output_kept['date'] = output_kept['date'].apply(  # convert date to string if datetime
                 lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
             output_kept.to_file(folder + '/' + self.name + '-kept.gpkg')  # output kept presences
@@ -889,7 +917,7 @@ class Absences:
         if isinstance(self.removed, gpd.GeoDataFrame):  # if removed presences...
             output_removed = self.removed.copy()  # copy removed presences GeoDataFrame
             if crs_output is not None:  # if an output CRS is provided
-                output_removed = reproject_crs(output_removed, crs_output)  # reproject
+                output_removed = reproject_crs(gdf=output_removed, crs_target=crs_output)  # reproject
             output_removed['date'] = output_removed['date'].apply(  # convert date to string if datetime
                 lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
             output_removed.to_file(folder + '/' + self.name + '-removed.gpkg')  # output removed presences
@@ -1155,13 +1183,13 @@ class Samples:
 
         if crs_output is not None:  # if CRS provided
             check_crs(par='crs_output', crs=crs_output)
-            output_samples = reproject_crs(output_samples, crs_output, ['centroid', 'midpoint'])  # reproject
+            output_samples = reproject_crs(gdf=output_samples, crs_target=crs_output, additional=[c for c in ['centroid', 'midpoint'] if c in output_samples])  # reproject
             output_parameters['samples_crs'] = str(crs_output)  # update parameter
         output_samples = extract(samples=output_samples) if coords else output_samples  # extract coords (if coords)
 
         if tz_output is not None:  # if TZ provided
             check_tz(par='tz_output', tz=tz_output)
-            output_samples = convert_tz(output_samples, ['datetime', 'datetime_beg', 'datetime_mid', 'datetime_end'], tz_output)  # convert
+            output_samples = convert_tz(df=output_samples, datetime_cols=['datetime', 'datetime_beg', 'datetime_mid', 'datetime_end'], tz_target=tz_output)  # convert
             output_parameters['samples_tz'] = str(tz_output)  # update parameter
         for col in ['datetime', 'datetime_beg', 'datetime_mid', 'datetime_end']:  # for each potential datetime col...
             if col in output_samples:  # ...if present...

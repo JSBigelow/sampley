@@ -41,11 +41,11 @@ def datapoints_from_file(
             check_dtype(par='x_col', obj=x_col, dtypes=str, none_allowed=True)
             check_dtype(par='y_col', obj=y_col, dtypes=str, none_allowed=True)
             check_cols(df=datapoints, cols=[x_col, y_col])
-            datapoints = parse_xy(datapoints, x_col, y_col, crs_input)  # convert to geopandas GeoDataFrame
+            datapoints = parse_xy(df=datapoints, x_col=x_col, y_col=y_col, crs=crs_input)  # convert to geopandas GeoDataFrame
         elif geometry_col is not None:  # else if geometry column is specified
             check_dtype(par='geometry_col', obj=geometry_col, dtypes=str, none_allowed=True)
             check_cols(df=datapoints, cols=geometry_col)
-            datapoints = parse_geoms(datapoints, geometry_col, crs_input)  # convert to geopandas GeoDataFrame
+            datapoints = parse_geoms(df=datapoints, geometry_col=geometry_col, crs=crs_input)  # convert to geopandas GeoDataFrame
 
     gtypes = list(set([type(geometry) for geometry in datapoints.geometry]))  # get geometry types
     if len(gtypes) == 1 and gtypes[0] == Point:  # if there is one type: Point
@@ -59,7 +59,7 @@ def datapoints_from_file(
 
     if crs_working is not None:  # if a working CRS is provided
         check_crs(par='crs_working', crs=crs_working)
-        datapoints = reproject_crs(datapoints, crs_working)  # reproject to CRS working
+        datapoints = reproject_crs(gdf=datapoints, crs_target=crs_working)  # reproject to CRS working
 
     check_projected(obj_name='datapoints', crs=datapoints.crs)  # check that the CRS is projected
 
@@ -69,10 +69,10 @@ def datapoints_from_file(
         check_cols(df=datapoints, cols=datetime_col)
         check_dtype(par='datetime_format', obj=datetime_format, dtypes=str, none_allowed=True)
         check_tz(par='tz_input', tz=tz_input, none_allowed=True)
-        parse_dts(datapoints, datetime_col, datetime_format, tz_input)  # parse datetimes and set TZ
+        parse_dts(df=datapoints, datetime_col=datetime_col, datetime_format=datetime_format, tz=tz_input)  # parse datetimes and set TZ
         if tz_working is not None:  # if a working timezone is specified
             check_tz(par='tz_working', tz=tz_working)
-            datapoints = convert_tz(datapoints, datetime_col, tz_working)  # convert to working TZ
+            datapoints = convert_tz(df=datapoints, datetime_cols=datetime_col, tz_target=tz_working)  # convert to working TZ
         if datetime_col != 'datetime':  # if datetime column not already called 'datetime'...
             datapoints['datetime'] = datapoints[datetime_col]  # ...rename datetime column
             print(f'Note: column \'{datetime_col}\' renamed to \'datetime\'.')
@@ -81,7 +81,7 @@ def datapoints_from_file(
 
     if section_id_col is not None:  # if a section ID column is specified
         check_dtype(par='section_id_col', obj=section_id_col, dtypes=str)
-        check_cols(datapoints, section_id_col)
+        check_cols(df=datapoints, cols=section_id_col)
         if section_id_col != 'section_id':  # if section ID column not called 'section_id'...
             datapoints.rename(columns={section_id_col: 'section_id'}, inplace=True)  # ...rename it
             print(f'Note: column \'{section_id_col}\' renamed to \'section_id\'.')
@@ -91,7 +91,7 @@ def datapoints_from_file(
 
     if datapoint_id_col is not None:  # if a datapoint ID column is specified
         check_dtype(par='datapoint_id_col', obj=datapoint_id_col, dtypes=str)
-        check_cols(datapoints, datapoint_id_col)
+        check_cols(df=datapoints, cols=datapoint_id_col)
         if datapoints[datapoint_id_col].nunique() < len(datapoints[datapoint_id_col]):  # check that all IDs are unique
             raise Exception('\n\n____________________'
                             '\nError: two or more datapoints have the same datapoint ID.'
@@ -141,7 +141,7 @@ def sections_from_file(
 
     if crs_working is not None:  # if a working CRS is provided
         check_crs(par='crs_working', crs=crs_working)
-        sections = reproject_crs(sections, crs_working)  # reproject to CRS working
+        sections = reproject_crs(gdf=sections, crs_target=crs_working)  # reproject to CRS working
 
     check_projected(obj_name='sections', crs=sections.crs)  # check that the CRS is projected
 
@@ -151,10 +151,10 @@ def sections_from_file(
         check_cols(df=sections, cols=datetime_col)
         check_dtype(par='datetime_format', obj=datetime_format, dtypes=str, none_allowed=True)
         check_tz(par='tz_input', tz=tz_input, none_allowed=True)
-        parse_dts(sections, datetime_col, datetime_format, tz_input)  # parse datetimes and set TZ
+        parse_dts(df=sections, datetime_col=datetime_col, datetime_format=datetime_format, tz=tz_input)  # parse datetimes and set TZ
         if tz_working is not None:  # if a working timezone is specified
             check_tz(par='tz_working', tz=tz_working)
-            sections = convert_tz(sections, datetime_col, tz_working)  # convert to working TZ
+            sections = convert_tz(df=sections, datetime_cols=datetime_col, tz_target=tz_working)  # convert to working TZ
         if datetime_col != 'datetime':  # if datetime column not already called 'datetime'...
             sections.rename(columns={datetime_col: 'datetime'}, inplace=True)  # ...rename datetime column
             print(f'Note: column \'{datetime_col}\' renamed to \'datetime\'.')
@@ -163,7 +163,7 @@ def sections_from_file(
 
     if section_id_col is not None:  # if a section ID column is specified
         check_dtype(par='section_id_col', obj=section_id_col, dtypes=str)
-        check_cols(sections, section_id_col)
+        check_cols(df=sections, cols=section_id_col)
         if sections[section_id_col].nunique() < len(sections[section_id_col]):  # check that all IDs are unique
             raise Exception('\n\n____________________'
                             '\nError: two or more sections have the same section ID.'
@@ -193,18 +193,18 @@ def sections_from_datapoints(
     sections = datapoints.copy()  # copy datapoints GeoDataFrame
 
     check_dtype(par='section_id_col', obj=section_id_col, dtypes=str)
-    check_cols(sections, section_id_col)
+    check_cols(df=sections, cols=section_id_col)
 
     if sortby is not None:  # if there is column to sort by
         check_dtype(par='sortby', obj=sortby, dtypes=[str, list])
-        check_cols(sections, sortby)
+        check_cols(df=sections, cols=sortby)
         sortby = sortby if isinstance(sortby, list) else [sortby] if isinstance(sortby, str) else None  # sortby to list
         sortby = ['section_id'] + [col for col in sortby if col != 'section_id']  # add 'section_id' to sortby list
         sections.sort_values(sortby, inplace=True)  # sort by sortby list
 
     if cols is not None:  # if aggregation dict provided
         check_dtype(par='agg_dict', obj=cols, dtypes=dict)
-        check_cols(sections, list(cols.keys()))
+        check_cols(df=sections, cols=list(cols.keys()))
     else:  # else no aggregation dict provided..
         cols = {}  # ...make empty dict
 
@@ -244,7 +244,7 @@ def periods_delimit(
         tz = extent[1]  # get timezone
         check_tz(par='extent timezone', tz=tz)
         extent = pd.DataFrame({'datetime': extent[0]})  # make DataFrame from extent list
-        parse_dts(extent, 'datetime', tz)  # parse datetimes
+        parse_dts(df=extent, datetime_col='datetime', tz=tz)  # parse datetimes
         datetime_col = 'datetime'  # set datetime column
     elif isinstance(extent, pd.DataFrame):  # if extent is a DataFrame
         check_dtype(par='datetime_col', obj=datetime_col, dtypes=str)
@@ -363,7 +363,7 @@ def segments_delimit(
 
     check_dtype(par='sections', obj=sections, dtypes=gpd.GeoDataFrame)
     check_projected(obj_name='sections', crs=sections.crs)
-    check_cols(sections, ['datetime', 'section_id'])
+    check_cols(df=sections, cols=['datetime', 'section_id'])
     check_dtype(par='var', obj=var, dtypes=str)
     var = var.lower()
     check_opt(par='var', opt=var, opts=['s', 'simple', 'j', 'joining', 'r', 'redistribution'])
@@ -548,7 +548,7 @@ def absences_delimit(
         # generate an absence point (depends on variation)
         if var in ['a', 'along']:  # along-the-line variation - randomly sample point along absence line
             point = absence_line.interpolate(random.uniform(a=0, b=absence_line.length))  # point along line
-            dfbal = line_locate_point(absence_line, point)  # get distance from beginning of absence line to point a
+            dfbal = line_locate_point(line=absence_line, other=point)  # get distance from beginning of absence line to point a
             absenceline = absencelines.iloc[absencelines[absencelines['dfbal'] > dfbal]['dfbal'].idxmin()]  # get absence line along which point a lies
             # if-point-not-in-corresponding-presence-zones check not necessary as this will never happen
             absences_list.append({  # append...
@@ -567,9 +567,9 @@ def absences_delimit(
             #   ...making a tiny line from point a to point b - LineString()
             #   ...making a line parallel to the tiny line at the specified distance - parallel_offset()
             #   ...getting the first coordinate of the parallel - coords[0]
-            point = Point(LineString([point_a, point_b]).parallel_offset(dfl, side).extract[0])  # point
+            point = Point(LineString([point_a, point_b]).parallel_offset(distance=dfl, side=side).extract[0])  # point
 
-            dfbal = line_locate_point(absence_line, point_a)  # get distance from beginning of absence line to point a
+            dfbal = line_locate_point(line=absence_line, other=point_a)  # get distance from beginning of absence line to point a
             absenceline = absencelines.iloc[absencelines[absencelines['dfbal'] > dfbal]['dfbal'].idxmin()]  # get absence line along which point a lies
             if not point.intersects(absenceline['presencezones']):  # if point not in corresponding presence zones...
                 absences_list.append({  # ...append...
@@ -589,7 +589,7 @@ def absences_delimit(
         absences = absences[['point_id', 'point', 'date']]  # ...necessary columns
     elif var in ['f', 'from']:  # from-the-line variation...
         absences = absences[['point_id', 'point', 'date', 'point_al']]  # ...necessary columns
-    remove_cols(absencelines, 'dfbal')  # clean up
+    remove_cols(df=absencelines, cols='dfbal')  # clean up
     # print('Please ignore RuntimeWarning: invalid value encountered in line_locate_point')
     return absences
 
@@ -600,8 +600,8 @@ def assign_cells(gdf: gpd.GeoDataFrame, cells: gpd.GeoDataFrame) -> gpd.GeoDataF
     geometry_col = gdf.geometry.name
     crs = gdf.crs
 
-    remove_cols(gdf, ['cell_id', 'polygon'])  # remove columns (if applicable)
-    gdf = gpd.sjoin(gdf, cells[['cell_id', 'polygon']], how='left')  # spatial join
+    remove_cols(df=gdf, cols=['cell_id', 'polygon'])  # remove columns (if applicable)
+    gdf = gpd.sjoin(left_df=gdf, right_df=cells[['cell_id', 'polygon']], how='left')  # spatial join
     gdf = gdf.drop('index_right', axis=1)  # drop index_right (byproduct of spatial join)
 
     gdf = gpd.GeoDataFrame(gdf, geometry=geometry_col, crs=crs)
@@ -614,7 +614,7 @@ def assign_periods(gdf: gpd.GeoDataFrame, periods: pd.DataFrame | str | None) ->
     crs = gdf.crs
 
     if isinstance(periods, pd.DataFrame):  # if periods were delimited with delimit_periods()
-        remove_cols(gdf, ['period_id'])  # remove columns (if applicable)
+        remove_cols(df=gdf, cols=['period_id'])  # remove columns (if applicable)
         gdf = pd.merge_asof(gdf.sort_values('datetime'), periods[['period_id', 'datetime_beg']],  # temporal join
                             left_on='datetime', right_on='datetime_beg', direction='backward')
         remove_cols(df=gdf, cols='datetime_beg')
@@ -641,7 +641,7 @@ def assign_segments(gdf: gpd.GeoDataFrame, segments: gpd.GeoDataFrame, how: str)
 
     geometry_col = gdf.geometry.name
     crs = gdf.crs  # get CRS
-    remove_cols(gdf, ['dfbsec_beg', 'segment_id'])  # remove columns, if present
+    remove_cols(df=gdf, cols=['dfbsec_beg', 'segment_id'])  # remove columns, if present
 
     if how in ['line', 'midpoint']:
         id_pairs_list = []  # a list for pairs of IDs and segment IDs
@@ -690,8 +690,8 @@ def assign_segments(gdf: gpd.GeoDataFrame, segments: gpd.GeoDataFrame, how: str)
                          })
 
         id_pairs = pd.DataFrame(id_pairs_list)  # make DataFrame of ID pairs
-        remove_cols(segments, 'overlap')  # clean up
-        gdf = pd.merge(gdf, id_pairs, on='datapoint_id', how='left')  # merge pairs to datapoints
+        remove_cols(df=segments, cols='overlap')  # clean up
+        gdf = pd.merge(left=gdf, right=id_pairs, on='datapoint_id', how='left')  # merge pairs to datapoints
 
     elif how in ['dfb']:
         gdf = get_dfb(trackpoints=gdf, grouper=['section_id'], grouper_name='sec')
@@ -731,8 +731,8 @@ def samples_grid(cells: gpd.GeoDataFrame, periods: pd.DataFrame | str | None, da
         ids = pd.DataFrame({'cell_id': [i[0] for i in ids], 'period_id': [i[1] for i in ids]})  # make DataFrame
         samples = pd.merge(ids, samples, on=['cell_id', 'period_id'], how='left')  # merge to samples
 
-    samples = pd.merge(periods, samples, on='period_id', how='right')  # add IDs and limits
-    samples = pd.merge(cells, samples, on='cell_id', how='right')  # add IDs and limits
+    samples = pd.merge(left=periods, right=samples, on='period_id', how='right')  # add IDs and limits
+    samples = pd.merge(left=cells, right=samples, on='cell_id', how='right')  # add IDs and limits
     return assigned, samples
 
 
@@ -753,7 +753,7 @@ def samples_segment(segments: gpd.GeoDataFrame, datapoints: gpd.GeoDataFrame,
                              'Options include: \'mean\', \'sum\', \'count\', and more.'
                              'Use help(Samples.grid) to see more options.'
                              '\n____________________')
-    samples = pd.merge(segments, samples, on='segment_id', how='left')  # add IDs and limits ('left' to get all)
+    samples = pd.merge(left=segments, right=samples, on='segment_id', how='left')  # add IDs and limits ('left' to get all)
     return assigned, samples
 
 
@@ -766,16 +766,16 @@ def samples_point(datapoints: gpd.GeoDataFrame, presences: gpd.GeoDataFrame, abs
 
     # datapoints to presences
     crs = presences.crs  # get presences CRS
-    presences = pd.merge(presences,  # merge the presences...
-                         datapoints[['datapoint_id'] + cols],  # ...to selected columns of datapoints...
+    presences = pd.merge(left=presences,  # merge the presences...
+                         right=datapoints[['datapoint_id'] + cols],  # ...to selected columns of datapoints...
                          how='left', on='datapoint_id')  # ...by matching their datapoint IDs
     presences = gpd.GeoDataFrame(presences, geometry='point', crs=crs)  # GeoDataFrame
 
     # datapoints to absences
     if sections is not None:  # if Sections provided
         sections_lines = sections.geometry.union_all()  # sections to single geometry
-        absences['dfbsl'] = line_locate_point(sections_lines,  # DFBSL for each absence
-                                              absences['point_al'] if 'point_al' in absences else absences['point'])
+        absences['dfbsl'] = line_locate_point(line=sections_lines,  # DFBSL for each absence
+                                              other=absences['point_al'] if 'point_al' in absences else absences['point'])
         datapoints = get_dfb(trackpoints=datapoints, grouper=None, grouper_name='sl')  # DFBSL for each datapoint
 
         crs = absences.crs  # get absences CRS
@@ -786,8 +786,8 @@ def samples_point(datapoints: gpd.GeoDataFrame, presences: gpd.GeoDataFrame, abs
         #   assumption: conditions at absence are those of most recently recorded point, i.e., conditions remain those
         #    of most recently recorded point till another point says otherwise
         absences = gpd.GeoDataFrame(absences, geometry='point', crs=crs)  # GeoDataFrame
-        remove_cols(datapoints, 'dfbsl')  # remove DFBSL from datapoints
-        remove_cols(absences, 'dfbsl')  # remove DFBSL from absences
+        remove_cols(df=datapoints, cols='dfbsl')  # remove DFBSL from datapoints
+        remove_cols(df=absences, cols='dfbsl')  # remove DFBSL from absences
 
     # concat presences and absences
     presences['p-a'] = 1  # set presence-absence value
@@ -833,13 +833,13 @@ def samples_grid_se(sections: gpd.GeoDataFrame, cells: gpd.GeoDataFrame, periods
                                                 for subsection in assigned_length.geometry.to_crs('EPSG:4326')]
             agg_dict['se_length_geo'] = 'sum'  # add column to aggregation dictionary
 
-        assigned = pd.merge(assigned,  # merge assigned skeleton to...
-                            assigned_length,  # ...length measurements
+        assigned = pd.merge(left=assigned,  # merge assigned skeleton to...
+                            right=assigned_length,  # ...length measurements
                             on=['section_id', 'datetime', 'period_id', 'cell_id'], how='outer')
         samples_length = (assigned_length.copy().groupby(['cell_id', 'period_id']).  # group by cell-period...
                           agg(agg_dict).reset_index())  # ...and sum measurements
-        samples = pd.merge(samples,  # merge samples skeleton...
-                           samples_length,  # ...to length samples
+        samples = pd.merge(left=samples,  # merge samples skeleton...
+                           right=samples_length,  # ...to length samples
                            on=['cell_id', 'period_id'], how='outer')
 
     if esw:  # if ESW...
@@ -860,23 +860,23 @@ def samples_grid_se(sections: gpd.GeoDataFrame, cells: gpd.GeoDataFrame, periods
                                             for subsection_area in assigned_area.geometry.to_crs('EPSG:4326')]
             agg_dict['se_area_geo'] = 'sum'  # add column to aggregation dictionary
 
-        assigned = pd.merge(assigned,  # merge assigned skeleton to...
-                            assigned_area,  # ...area measurements
+        assigned = pd.merge(left=assigned,  # merge assigned skeleton to...
+                            right=assigned_area,  # ...area measurements
                             on=['section_id', 'datetime', 'period_id', 'cell_id'], how='outer')
         samples_area = (assigned_area.copy().groupby(['cell_id', 'period_id']).  # group by cell-period...
                           agg(agg_dict).reset_index())  # ...and sum measurements
-        samples = pd.merge(samples,  # merge samples skeleton...
-                           samples_area,  # ...to area samples
+        samples = pd.merge(left=samples,  # merge samples skeleton...
+                           right=samples_area,  # ...to area samples
                            on=['cell_id', 'period_id'], how='outer')
 
     check_dtype(par='full', obj=full, dtypes=bool)
     if full:  # if full true, get all cell-period combos and merge them
         ids = [(cell, period) for cell in cells['cell_id'] for period in periods['period_id']]  # get all combos of IDs
         ids = pd.DataFrame({'cell_id': [i[0] for i in ids], 'period_id': [i[1] for i in ids]})  # make DataFrame
-        samples = pd.merge(ids, samples, on=['cell_id', 'period_id'], how='left')  # merge to samples
+        samples = pd.merge(left=ids, right=samples, on=['cell_id', 'period_id'], how='left')  # merge to samples
 
-    samples = pd.merge(periods, samples, on='period_id', how='right')  # add IDs and limits
-    samples = pd.merge(cells, samples, on='cell_id', how='right')  # add IDs and limits
+    samples = pd.merge(left=periods, right=samples, on='period_id', how='right')  # add IDs and limits
+    samples = pd.merge(left=cells, right=samples, on='cell_id', how='right')  # add IDs and limits
     return assigned, samples
 
 
@@ -957,7 +957,7 @@ def extract(samples: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
     for geometry in ['centroid', 'midpoint', 'point']:
         if geometry in samples:  # if it is in samples
-            remove_cols(samples, [geometry + '_lon', geometry + '_lat', geometry + '_x', geometry + '_y'])
+            remove_cols(df=samples, cols=[geometry + '_lon', geometry + '_lat', geometry + '_x', geometry + '_y'])
             index = samples.columns.get_loc(geometry)
             samples.insert(index + 1, geometry + suffix_y, samples[geometry].y)  # extract the y coords
             samples.insert(index + 1, geometry + suffix_x, samples[geometry].x)  # extract the x coords
