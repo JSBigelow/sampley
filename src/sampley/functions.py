@@ -55,7 +55,7 @@ def datapoints_from_file(
         print('Note: some or all geometries are MultiPoints and will be exploded to Points.')
         datapoints = datapoints.explode()  # explode MultiPoints to Points
     else:  # else if there are other types, print error message...
-        raise TypeError(f'geometries are not Points or MultiPoints. \nGeometry types include {', '.join(gtypes)}.')
+        raise TypeError(f'geometries are not Points or MultiPoints. \nGeometry types include {", ".join(gtypes)}.')
 
     if crs_working is not None:  # if a working CRS is provided
         check_crs(par='crs_working', crs=crs_working)
@@ -135,7 +135,7 @@ def sections_from_file(
         sections = sections.explode()  # explode MultiLineStrings to LineStrings
     else:  # else if there are other types, print error message...
         raise TypeError('geometries are not LineStrings or MultiLineStrings.'
-                        f'\nGeometry types include {', '.join(gtypes)}.'
+                        f'\nGeometry types include {", ".join(gtypes)}.'
                         '\nTo make sections from Points, first input the Points as DataPoints and then'
                         ' use Sections.from_datapoints() to make Sections from the DataPoints.')
 
@@ -242,37 +242,50 @@ def periods_delimit(
 
     if isinstance(extent, tuple):  # if extent is a tuple...
         tz = extent[1]  # get timezone
-        check_tz(par='extent timezone', tz=tz)
+        check_tz(par='extent timezone', tz=tz, none_allowed=True)
         extent = pd.DataFrame({'datetime': extent[0]})  # make DataFrame from extent list
         parse_dts(df=extent, datetime_col='datetime', tz=tz)  # parse datetimes
         datetime_col = 'datetime'  # set datetime column
     elif isinstance(extent, pd.DataFrame):  # if extent is a DataFrame
         check_dtype(par='datetime_col', obj=datetime_col, dtypes=str)
         check_cols(df=extent, cols=datetime_col)
+        try:
+            tz = str(extent[datetime_col].dtype.tz)  # get timezone if there is one
+        except AttributeError:  # else, if there is no timezone...
+            tz = None
+    else:  # else unrecognised datatype (should never be reached)
+        extent = None
+        tz = None
 
-    # get the begin datetime
+    # get the begin date
     timecodes = {'d': 'd', 'm': 'MS', 'y': 'YS'}  # set time period codes
     timecode = str(int(num)) + timecodes[unit[0]]  # make time code for grouper by combining number and unit
     periods = extent.groupby(pd.Grouper(key=datetime_col, freq=timecode)).first().reset_index()  # group
-    periods.rename(columns={datetime_col: 'datetime_beg'}, inplace=True)  # rename column
+    periods.rename(columns={datetime_col: 'date_beg'}, inplace=True)  # rename column
 
-    # get the end datetime (different for days, months, and years)
-    if unit in ['d', 'day']:  # days: add the number of days to the begin datetime and subtract 1 sec
-        periods['datetime_end'] = periods['datetime_beg'].apply(lambda d: d + timedelta(days=num, seconds=-1))
+    # get the end date (different for days, months, and years)
+    if unit in ['d', 'day']:  # days: add the number of days to the begin date and subtract 1 sec
+        periods['date_end'] = periods['date_beg'].apply(lambda d: d + timedelta(days=num, seconds=-1))
     elif unit in ['m', 'month']:  # months: add years and months based on number of months and subtract 1 sec
-        periods['datetime_end'] = periods['datetime_beg'].apply(lambda d: datetime(
+        periods['date_end'] = periods['date_beg'].apply(lambda d: datetime(
             d.year + (d.month + num) // 12 if (d.month + num) % 12 != 0 else d.year + (d.month + num) // 12 - 1,
             (d.month + num) % 12 if (d.month + num) % 12 != 0 else 12,
-            d.day)) - timedelta(seconds=1)
-    elif unit in ['y', 'year']:  # years: add the number of years to the begin datetime and subtract 1 sec
-        periods['datetime_end'] = periods['datetime_beg'].apply(lambda d: datetime(
-            d.year + num, d.month, d.day)) - timedelta(seconds=1)
+            d.day) - timedelta(seconds=1))
+        periods['date_end'] = periods['date_end'].dt.tz_localize(tz) if tz is not None else periods['date_end']  # set TZ
+    elif unit in ['y', 'year']:  # years: add the number of years to the begin date and subtract 1 sec
+        periods['date_end'] = periods['date_beg'].apply(lambda d: datetime(
+            d.year + num, d.month, d.day) - timedelta(seconds=1))
+        periods['date_end'] = periods['date_end'].dt.tz_localize(tz) if tz is not None else periods['date_end']  # set TZ
 
-    periods['datetime_mid'] = periods.apply(  # get mid datetime by adding difference to begin datetime, floor to secs
-        lambda r: (r['datetime_beg'] + (r['datetime_end'] - r['datetime_beg']) / 2).floor('s'), axis=1)
-    periods['period_id'] = periods['datetime_beg'].apply(  # make period IDs
+    periods['date_mid'] = periods.apply(  # get mid date by adding difference to begin date, floor to secs
+        lambda r: (r['date_beg'] + (r['date_end'] - r['date_beg']) / 2).ceil('s'), axis=1)
+    periods['period_id'] = periods['date_beg'].apply(  # make period IDs
         lambda d: 'p' + str(d)[:10] + '-' + str(int(num)) + unit[0])
-    periods = periods[['period_id', 'datetime_beg', 'datetime_mid', 'datetime_end']]  # keep only necessary columns
+
+    for col in ['date_beg', 'date_mid', 'date_end']:  # for each date col, remove hours, minutes, and seconds
+        periods[col] = periods[col].apply(lambda dt: dt.replace(hour=0, minute=0, second=0))
+
+    periods = periods[['period_id', 'date_beg', 'date_mid', 'date_end']]  # keep only necessary columns
     return periods
 
 
@@ -567,7 +580,7 @@ def absences_delimit(
             #   ...making a tiny line from point a to point b - LineString()
             #   ...making a line parallel to the tiny line at the specified distance - parallel_offset()
             #   ...getting the first coordinate of the parallel - coords[0]
-            point = Point(LineString([point_a, point_b]).parallel_offset(distance=dfl, side=side).extract[0])  # point
+            point = Point(LineString([point_a, point_b]).parallel_offset(distance=dfl, side=side).extract_coords[0])  # point
 
             dfbal = line_locate_point(line=absence_line, other=point_a)  # get distance from beginning of absence line to point a
             absenceline = absencelines.iloc[absencelines[absencelines['dfbal'] > dfbal]['dfbal'].idxmin()]  # get absence line along which point a lies
@@ -615,9 +628,9 @@ def assign_periods(gdf: gpd.GeoDataFrame, periods: pd.DataFrame | str | None) ->
 
     if isinstance(periods, pd.DataFrame):  # if periods were delimited with delimit_periods()
         remove_cols(df=gdf, cols=['period_id'])  # remove columns (if applicable)
-        gdf = pd.merge_asof(gdf.sort_values('datetime'), periods[['period_id', 'datetime_beg']],  # temporal join
-                            left_on='datetime', right_on='datetime_beg', direction='backward')
-        remove_cols(df=gdf, cols='datetime_beg')
+        gdf = pd.merge_asof(gdf.sort_values('datetime'), periods[['period_id', 'date_beg']],  # temporal join
+                            left_on='datetime', right_on='date_beg', direction='backward')
+        remove_cols(df=gdf, cols='date_beg')
         gdf = gdf.sort_index()
     elif isinstance(periods, str):  # if periods are preset and the column name has been entered
         check_cols(df=gdf, cols=periods)
@@ -920,7 +933,7 @@ def samples_merge(approach: str, **kwargs: pd.DataFrame):
 
     if approach in ['g', 'grid']:  # grid approach
         merger = ['cell_id', 'polygon', 'centroid',  # merge on cell details and...
-                  'period_id', 'datetime_beg', 'datetime_mid', 'datetime_end']  # ...period details
+                  'period_id', 'date_beg', 'date_mid', 'date_end']  # ...period details
     elif approach in ['s', 'segment']:  # segment approach
         merger = ['segment_id', 'line', 'midpoint', 'date',  # merge on segment details
                   'section_id', 'dfbsec_beg', 'dfbsec_end']
@@ -939,8 +952,9 @@ def samples_merge(approach: str, **kwargs: pd.DataFrame):
             renamer = {col: col + '_' + name for col in cols if col in samples}  # get cols to be renamed
             if len(renamer) > 0:  # if there are cols to be renamed...
                 samples.rename(columns=renamer, inplace=True)  # ...rename them and...
+                rename_print = [k + '\' to \'' + v + '\'' for k, v in renamer.items()]
                 print(f'  In samples \'{name}\':'  # ...print message
-                      f'\n    \'{'\n    \''.join([k + '\' to \'' + v + '\'' for k, v in renamer.items()])}')
+                      f'\n    \'{" | ".join(rename_print)}')
 
     merged = reduce(lambda left, right: pd.merge(left, right, on=merger, how='outer'), kwargs.values())  # merge all
     return merged
@@ -948,7 +962,7 @@ def samples_merge(approach: str, **kwargs: pd.DataFrame):
 
 ##############################################################################################################
 # Stage 3: Output
-def extract(samples: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def extract_coords(samples: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
     if samples.crs.axis_info[0].unit_name == 'degree':
         suffix_x, suffix_y = '_lon', '_lat'

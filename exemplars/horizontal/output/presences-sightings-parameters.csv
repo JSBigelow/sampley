@@ -1,0 +1,5 @@
+parameter,value
+presences_crs,EPSG:32619
+presences_sp_threshold,10000
+presences_tm_threshold,5
+presences_tm_unit,day

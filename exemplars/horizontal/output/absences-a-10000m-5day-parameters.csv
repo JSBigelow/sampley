@@ -1,0 +1,7 @@
+parameter,value
+absences_var,along
+absences_target,20
+absences_crs,EPSG:32619
+absences_sp_threshold,10000
+absences_tm_threshold,5
+absences_tm_unit,day

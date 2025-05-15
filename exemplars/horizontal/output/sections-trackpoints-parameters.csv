@@ -1,0 +1,4 @@
+parameter,value
+sections_filepath,./input/trackpoints.csv (via datapoints)
+sections_crs,EPSG:32619
+sections_tz,UTC-05:00

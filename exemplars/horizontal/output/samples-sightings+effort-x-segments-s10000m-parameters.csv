@@ -1,0 +1,22 @@
+parameter,value
+name,samples-sightings+effort-x-segments-s10000m
+names,samples-datapoints-sightings-x-segments-s10000m+samples-sections-sections-x-segments-s10000m
+approach,segment
+resampled,datapoints; effort
+datapoints_name,datapoints-sightings; nan
+datapoints_filepath,./input/sightings.gpkg; nan
+datapoints_crs,EPSG:32619; nan
+datapoints_tz,UTC-05:00; nan
+datapoints_data_cols,individuals; nan
+segments_name,segments-s10000m
+sections_name,sections-sections
+segments_crs,EPSG:32619
+segments_var,simple
+segments_randomise,True
+segments_target,10000
+segments_unit,metre
+cols,{'individuals': 'sum'}; nan
+effort_esw,nan; 2000.0
+effort_audf,nan; None
+effort_euc-geo,nan; euclidean
+samples_crs,EPSG:4326

@@ -1,0 +1,15 @@
+parameter,value
+approach,point
+resampled,datapoints
+presences_name,presences-trackpoints
+presences_crs,EPSG:32619
+presences_sp_threshold,10000
+presences_tm_threshold,5
+presences_tm_unit,day
+absences_name,absences-a-10000m-5day
+absences_var,along
+absences_target,20
+absences_crs,EPSG:32619
+absences_sp_threshold,10000
+absences_tm_threshold,5
+absences_tm_unit,day

@@ -33,11 +33,12 @@ def check_cols(df: pd.DataFrame, cols: str | list[str]):
 # options and datatypes
 def check_opt(par: str, opt: str, opts: list[str]):
     if opt.lower() not in opts:
+        opts_print = [f"'{opt}'" for opt in opts]
         raise Exception(
             '\n\n____________________'
             f'\nError: invalid value for \'{par}\'. The value is \'{opt}\'.'
             f'\nPlease ensure that the value for \'{par}\' is one of:'
-            f'\n  {'\n  '.join([f'\'{opt}\'' for opt in opts])}'
+            f'\n  {", ".join(opts_print)}'
             '\n____________________')
 
 
@@ -58,7 +59,7 @@ def check_dtype(par: str, obj, dtypes, none_allowed: bool = False):
             '\n\n____________________'
             f'\nTypeError: invalid datatype for the value of \'{par}\'. The datatype is {type(obj).__name__}.'
             f'\nPlease ensure that the value of \'{par}\' is of one of the following types:'
-            f'\n  {'\n  '.join([dtype.__name__ for dtype in dtypes])}'
+            f'\n  {", ".join([dtype.__name__ for dtype in dtypes])}'
             '\n____________________')
 
 
@@ -233,7 +234,7 @@ def reproject_crs(gdf: gpd.GeoSeries | gpd.GeoDataFrame, crs_target: str | int |
                                         '\n____________________')
                     else:
                         geometry_gs = gpd.GeoSeries(gdf[geometry]).set_crs(gdf.crs)  # get geometries as a GeoSeries
-                        geometry_gs = reproject_crs(gdf=geometry_gs, crs_target=crs_target)  # reproject
+                        geometry_gs = geometry_gs.to_crs(crs_target)  # reproject
                         gdf[geometry] = geometry_gs  # return to samples GeoDataFrame
                         print(f'Success: column \'{geometry}\' reprojected to CRS {crs_name}')
             gdf = gdf.to_crs(crs_target)

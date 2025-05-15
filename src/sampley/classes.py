@@ -288,7 +288,7 @@ class Periods:
             datetime_col='datetime')
 
         try:
-            tz = str(periods['datetime_beg'].dtype.tz)
+            tz = str(periods['date_beg'].dtype.tz)
         except AttributeError:
             tz = None
 
@@ -297,8 +297,8 @@ class Periods:
             name='periods-' + str(int(num)) + unit[0],
             parameters={
                 'periods_tz': tz,
-                'periods_extent': periods['datetime_beg'].min().strftime('%Y-%m-%d %H:%M:%S') + '-' +
-                                  periods['datetime_end'].max().strftime('%Y-%m-%d %H:%M:%S'),
+                'periods_extent': periods['date_beg'].min().strftime('%Y-%m-%d') + '-' +
+                                  periods['date_end'].max().strftime('%Y-%m-%d'),
                 'periods_extent_source': source,
                 'periods_number': num,
                 'periods_unit': unit})
@@ -310,9 +310,9 @@ class Periods:
         folder = folder + '/' if folder[-1] != '/' else folder
 
         input_periods = open_file(folder + basename + '.csv')
-        input_periods['datetime_beg'] = pd.to_datetime(input_periods['datetime_beg'])
-        input_periods['datetime_mid'] = pd.to_datetime(input_periods['datetime_mid'])
-        input_periods['datetime_end'] = pd.to_datetime(input_periods['datetime_end'])
+        input_periods['date_beg'] = pd.to_datetime(input_periods['date_beg'])
+        input_periods['date_mid'] = pd.to_datetime(input_periods['date_mid'])
+        input_periods['date_end'] = pd.to_datetime(input_periods['date_end'])
 
         try:
             input_parameters = open_file(folder + basename + '-parameters.csv')
@@ -330,7 +330,7 @@ class Periods:
         output_periods = self.periods.copy()  # copy dataframe
         output_parameters = self.parameters.copy()  # copy parameters
 
-        for col in ['datetime_beg', 'datetime_mid', 'datetime_end']:  # for each potential datetime col...
+        for col in ['date_beg', 'date_mid', 'date_end']:  # for each potential datetime col...
             output_periods[col] = output_periods[col].apply(  # convert datetime to string if there is datetime
                 lambda dt: str(dt) if isinstance(dt, (datetime | pd.Timestamp)) else dt)
         output_periods.to_csv(folder + '/' + self.name + '.csv', index=False)  # output to CSV
@@ -1105,8 +1105,8 @@ class Samples:
         approach = parameters_df['approach'].unique()
         if len(approach) > 1:  # if more than one approach used to get samples
             raise Exception('\n\n____________________'
-                            'Error: samples generated with different approaches and should not be merged.'
-                            f'\nApproaches are: {', '.join(approach)}'
+                            '\nError: samples generated with different approaches and should not be merged.'
+                            f'\nApproaches are: {", ".join(approach)}'
                             '\n____________________')
         else:  # else only one approach used
             approach = approach[0]  # get approach
@@ -1114,11 +1114,11 @@ class Samples:
                 print(f'\nNote: samples generated with the {approach} approach')
             elif approach in ['point']:
                 raise Exception('\n\n____________________'
-                                'Error: samples generated with point approach cannot be merged.'
+                                '\nError: samples generated with point approach cannot be merged.'
                                 '\n____________________')
             else:
                 raise ValueError('\n\n____________________'
-                                 'ValueError: Samples generated with unrecognised approach.'
+                                 '\nValueError: Samples generated with unrecognised approach.'
                                  f'\nApproach is: {approach}'
                                  '\n____________________')
 
@@ -1163,13 +1163,20 @@ class Samples:
             parameters={'name': name, 'names': '+'.join([sample.name for sample in kwargs.values()])} | parameters,
             assigned=None)
 
+    def reproject(self, crs_target: str | int | pyproj.crs.crs.CRS = 'EPSG:4326'):
+        check_crs(par='crs_target', crs=crs_target)
+        self.samples = reproject_crs(gdf=self.samples, crs_target=crs_target, additional=[c for c in ['centroid', 'midpoint'] if c in self.samples])  # reproject
+        self.parameters['samples_crs'] = str(crs_target)  # update parameter
+
+    def coords(self):
+        self.samples = extract_coords(samples=self.samples)  # extract coords
+
     def save(
             self,
             folder: str,
             filetype: str = 'both',
             crs_output: str | int | pyproj.crs.crs.CRS = None,
-            tz_output: str | timezone | pytz.BaseTzInfo = None,
-            coords: bool = True):
+            coords: bool = False):
 
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
@@ -1185,16 +1192,12 @@ class Samples:
             check_crs(par='crs_output', crs=crs_output)
             output_samples = reproject_crs(gdf=output_samples, crs_target=crs_output, additional=[c for c in ['centroid', 'midpoint'] if c in output_samples])  # reproject
             output_parameters['samples_crs'] = str(crs_output)  # update parameter
-        output_samples = extract(samples=output_samples) if coords else output_samples  # extract coords (if coords)
+        output_samples = extract_coords(samples=output_samples) if coords else output_samples  # extract coords (if coords)
 
-        if tz_output is not None:  # if TZ provided
-            check_tz(par='tz_output', tz=tz_output)
-            output_samples = convert_tz(df=output_samples, datetime_cols=['datetime', 'datetime_beg', 'datetime_mid', 'datetime_end'], tz_target=tz_output)  # convert
-            output_parameters['samples_tz'] = str(tz_output)  # update parameter
-        for col in ['datetime', 'datetime_beg', 'datetime_mid', 'datetime_end']:  # for each potential datetime col...
+        for col in ['date', 'date_beg', 'date_mid', 'date_end']:  # for each potential date col...
             if col in output_samples:  # ...if present...
-                output_samples[col] = output_samples[col].apply(  # convert datetime to string if there is datetime
-                    lambda dt: dt.strftime('%Y-%m-%d %H:%M:%S') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
+                output_samples[col] = output_samples[col].apply(  # convert date to string if there is date
+                    lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
 
         if filetype in ['csv', 'both']:  # if CSV
             output_samples.to_csv(folder + '/' + self.name + '.csv', index=False)  # output
