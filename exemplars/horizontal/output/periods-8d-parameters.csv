@@ -1,6 +1,0 @@
-parameter,value
-periods_tz,UTC-05:00
-periods_extent,2019-01-25-2019-03-05
-periods_extent_source,tuple
-periods_number,8
-periods_unit,day

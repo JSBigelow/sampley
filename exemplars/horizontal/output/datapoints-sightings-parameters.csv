@@ -1,5 +1,0 @@
-parameter,value
-datapoints_filepath,./input/sightings.gpkg
-datapoints_crs,EPSG:32619
-datapoints_tz,UTC-05:00
-datapoints_data_cols,individuals

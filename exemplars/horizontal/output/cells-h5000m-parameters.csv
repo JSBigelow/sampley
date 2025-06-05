@@ -1,8 +1,0 @@
-parameter,value
-cells_crs,EPSG:32619
-cells_extent,"493765.4925316478, 4689798.08683991, 671300.7003074577, 4759798.08683991"
-cells_extent_source,tuple
-cells_var,hexagonal
-cells_side,5000
-cells_unit,metre
-cells_buffer,2000

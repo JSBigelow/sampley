@@ -1,7 +1,0 @@
-parameter,value
-sections_name,sections-sections
-segments_crs,EPSG:32619
-segments_var,simple
-segments_randomise,True
-segments_target,10000
-segments_unit,metre
