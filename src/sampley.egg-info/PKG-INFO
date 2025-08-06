@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: sampley
-Version: 0.0.7
+Version: 0.0.9
 Summary: sample survey data
 Author-email: Jonathan Syme <jsyme@bigelow.org>
 Maintainer-email: Jonathan Syme <jsyme@bigelow.org>
@@ -15,7 +15,7 @@ Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: geopandas>=1.0.0
 Requires-Dist: matplotlib>=3.0.0
-Requires-Dist: numpy>=2.0.0
+Requires-Dist: numpy>=1.26.4
 Requires-Dist: pandas>=2.0.0
 Requires-Dist: pyogrio
 Requires-Dist: pyproj>=3.0.0
