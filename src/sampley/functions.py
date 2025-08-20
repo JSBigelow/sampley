@@ -9,7 +9,7 @@ import math
 import numpy as np
 from pyproj import Geod
 import random
-from shapely import Point, MultiPoint, LineString, MultiLineString, Polygon, line_locate_point
+from shapely import Point, MultiPoint, LineString, MultiLineString, Polygon
 from shapely.errors import GEOSException
 from shapely.ops import substring, nearest_points
 import typing
@@ -728,7 +728,8 @@ def segments_datetimes(segments: gpd.GeoDataFrame, datapoints: gpd.GeoDataFrame)
 
 def presences_delimit(
         datapoints: gpd.GeoDataFrame,
-        presence_col: str | None = None)\
+        presence_col: str | None = None,
+        block: str = None)\
         -> gpd.GeoDataFrame:
 
     """Delimit presences.
@@ -744,7 +745,9 @@ def presences_delimit(
             The name of the column containing the values that determine which points are presences (e.g., a column
              containing a count of individuals). This column must contain only integers or floats. Only needs to be
              specified if the datapoints GeoDataFrame includes points that are not presences.
-
+        block : str, optional, default None
+            Optionally, the name of a column that contains unique values to be used to separate the presences into
+             blocks. These blocks can then be used later when generating absences.
     Returns:
         GeoDataFrame
             Returns a GeoDataFrame containing the presences.
@@ -772,7 +775,12 @@ def presences_delimit(
     presences = gpd.GeoDataFrame(presences, geometry='point', crs=datapoints.crs)  # GeoDataFrame
     presences['point_id'] = ['p' + str(i).zfill(len(str(len(presences))))
                              for i in range(1, len(presences) + 1)]  # create point IDs
-    presences = presences[['point_id', 'point', 'date', 'datapoint_id']]  # reorder columns
+    if block is not None:
+        check_dtype(par='block', obj=block, dtypes=str)
+        check_cols(df=presences, cols=block)
+        presences = presences[['point_id', 'point', 'date', 'datapoint_id', block]]  # select and reorder columns
+    else:
+        presences = presences[['point_id', 'point', 'date', 'datapoint_id']]  # select and reorder columns
     return presences
 
 
@@ -787,10 +795,15 @@ def presencezones_delimit(
     """Delimit presences zones.
 
     From the presences, use a spatial and, optionally, temporal threshold to make presences zones.
-    Presence zones are zones around presences that are deemed to be ‘occupied’ by the animals. Spatial and temporal
-     thresholds determine the extent of these occupied zones.
-    Additionally, the presence zones correspond to sections — specifically, the sections that they overlap spatially
-     and, optionally, temporally with, as determined by the spatial and temporal thresholds.
+    Presence zones are zones around presences that are deemed to be ‘occupied’ by the animals. Absences will not be
+     generated within the presence zones, thus they serve to ensure that absences are generated sufficiently far from
+     presences.
+    Spatial and temporal thresholds determine the extent of the presence zones. The spatial threshold represents the
+     radius and the temporal threshold the number of units (e.g., days) before and after that of the presence. For
+     example, a spatial threshold of 10 000 m and a temporal threshold of 5 days means that no absence will be
+     generated within 10 000 m and 5 days of any presence.
+    Note that the presence zones correspond to sections — specifically, the sections that they overlap spatially and,
+     optionally, temporally with, as determined by the spatial and temporal thresholds.
 
     Parameters:
         presences : GeoDataFrame
@@ -850,21 +863,92 @@ def presencezones_delimit(
                         presences_overlap.append(presence_point)  # ...append its geometry to the list
             presencezones_list.append({  # append to the presence zones list...
                 'unit': section_unit,  # the unique unit of the presence zones
-                'presencezones':  # the overlapping presences as a MultiPoint (if there are any, else None)
-                    MultiPoint(presences_overlap).buffer(sp_threshold) if len(presences_overlap) > 0 else None})
-        presencezones = pd.merge(sections_pz, pd.DataFrame(presencezones_list), on='unit', how='left')  # merge sections to presence zones
-        presencezones['presencezones'] = gpd.GeoSeries(presencezones['presencezones'], crs=presences_pz.crs)  # presence zones to GeoSeries
+                'presencezones':  # the zones of the temporally overlapping presences (if there are any, else None)
+                    gpd.GeoSeries(presences_overlap).buffer(sp_threshold).union_all()
+                    if len(presences_overlap) > 0 else None})
+        # merge sections to presence zones that they overlap temporally with
+        presencezones = pd.merge(sections_pz, pd.DataFrame(presencezones_list), on='unit', how='left')
+        # convert the presence zones to GeoSeries
+        presencezones['presencezones'] = gpd.GeoSeries(presencezones['presencezones'], crs=presences_pz.crs)
         presencezones.drop('unit', axis=1, inplace=True)  # remove unit col
         presencezones.set_geometry('presencezones', inplace=True)  # set the presence zones as the geometry
         presencezones = presencezones[['section_id', 'presencezones']]  # necessary
 
     else:  # else if there is no temporal threshold or unit
         presencezones = gpd.GeoDataFrame(  # make a presence zones GeoDataFrame with single row containing...
-            data={'section_id': ['all'],  # ...a null section ID value and...
-                  'presencezones': [MultiPoint(presences_pz['point']).buffer(sp_threshold)]},  # ...zones of all presences
+            data={'section_id': ['all'],  # ...a dummy section ID value and...
+                  'presencezones': [presences_pz['point'].buffer(sp_threshold).union_all()]},  # ...zones of all presences
             geometry='presencezones', crs=presences_pz.crs)
 
     return presencezones
+
+
+def generate_absences(
+        sections: gpd.GeoDataFrame,
+        var: str,
+        target: int | float,
+        limit: int = 10,
+        dfls: list[int | float] = None):
+    """Generate absences.
+
+    Function to generate absences according to the 'along-the-line' or 'from-the-line' variations. See under
+     absences_delimit for more information and parameters.
+    """
+
+    # calculate distance from beginning of all sections for each section
+    sections['dfbs'] = sections.geometry.length.cumsum().shift(1).replace(np.nan, 0)
+    sections_all = sections.geometry.union_all()  # put all sections into single geometry
+    absences_list = []  # list for the absences
+
+    i = 0  # initialise i: absence count
+    j = 0  # initialise j: attempt count
+
+    # while absence count is less than target and attempt count is less than target x limit
+    while i < target and j < target * limit:
+
+        # generate an absence (depends on variation)
+        if var in ['a', 'along']:  # along-the-line variation - randomly sample absence along sections
+            dfbs = random.uniform(a=0, b=sections_all.length)  # randomly select distance from beginning of all sections
+            point = sections_all.interpolate(dfbs)  # make point at that distance
+            section = sections.iloc[sections[sections['dfbs'] <= dfbs]['dfbs'].idxmax()]  # get section along which point lies
+            if not point.intersects(section['presencezones']):  # if point not in corresponding presence zones...
+                absences_list.append({  # ...it is an absence, so append...
+                    'point': point,  # ...point
+                    'date': section['date'],  # ...date
+                    'section_id': section['section_id'],  # ...section ID
+                    'dfbs': dfbs})  # ...distance from beginning of sections to point
+                i += 1  # increase absence count
+        elif var in ['f', 'from']:  # from-the-line variation - randomly sample absence at a distance from sections
+            dfbs = random.uniform(a=0, b=sections_all.length-0.001)  # randomly select distance from beginning of all sections
+            point_a = sections_all.interpolate(dfbs)  # make point at that distance
+            point_b = sections_all.interpolate(dfbs+0.001)  # make point at that distance plus a tiny (arbitrary) distance
+            dfl = random.choice(dfls)  # randomly select distance from the line
+            side = random.choice(['left', 'right'])  # randomly choose side
+            # generate a point at the specified distance from the line by...
+            #   ...making a tiny line from point a to point b - LineString([point_a, point_b])
+            #   ...making a line parallel to the tiny line at the specified distance on the randomly chosen side -
+            #       parallel_offset(distance=dfl, side=side)
+            #   ...getting the first coordinate of the parallel - coords[0]
+            point = Point(LineString([point_a, point_b]).parallel_offset(distance=dfl, side=side).coords[0])  # point
+            section = sections.iloc[sections[sections['dfbs'] <= dfbs]['dfbs'].idxmax()]  # get section along which point a lies
+            if not point.intersects(section['presencezones']):  # if point not in corresponding presence zones...
+                absences_list.append({  # ...it is an absence, so append...
+                    'point': point,  # ...point
+                    'date': section['date'],  # ...date
+                    'section_id': section['section_id'],  # ...section ID
+                    'dfbs': dfbs,  # ...distance from beginning of sections to point
+                    'point_al': point_a})   # ...point a
+                i += 1  # increase absence count
+        else:  # unrecognised variation (should not be reached given check_opt() above)
+            raise Exception
+        j += 1  # increase attempt count
+
+    print(f'Target: {target} | Attempts: {j} | Successes: {i}')  # print summary
+    if i > 0:  # if at least one absence generated
+        absences = gpd.GeoDataFrame(absences_list, geometry='point', crs=sections.crs)  # GeoDataFrame
+        return absences
+    else:  # if no absences generated
+        return None
 
 
 def absences_delimit(
@@ -872,7 +956,11 @@ def absences_delimit(
         presencezones: gpd.GeoDataFrame,
         var: str,
         target: int | float,
-        dfls: list[int | float] = None)\
+        limit: int = 10,
+        dfls: list[int | float] = None,
+        block: str = None,
+        how: str = None,
+        presences: gpd.GeoDataFrame = None)\
         -> gpd.GeoDataFrame:
 
     """Delimit the absences.
@@ -900,14 +988,37 @@ def absences_delimit(
                  line and then, secondly, placing a point a certain distance from the first point perpendicular to
                  the line ('f' also accepted)
         target : int | float
-            The target number of absences to be generated. Note that, during thinning, some absences may be removed
-             so, to account for this, the target should be set higher than the number desired.
+            The target number of absences to be generated. Note that, during thinning (optionally conducted later),
+             some absences may be removed so, to account for this, the target should be set higher than the number
+             desired.
+        limit : int, optional, default 10
+            The value that is multiplied by the target to get the maximum potential number of points (e.g., if
+             target=100 and limit=10, a maximum of 1000 points can be generated). If the maximum number is reached
+             (or the target number of absences is reached), further absence generation is abandoned and those
+             absences that have been made are returned.
         dfls : list[int | float], optional, default None
             If using the from-the-line variation, a list of candidate distances from the line to use when generating
              absences. For each absence, one of these distances will be chosen at random and used to place the
              absence at that distance from the survey line. These distances can be generated in any way, including
              from a predefined distribution (e.g., a detection function) with the function generate_dfls.
-
+        block : str, optional, default None
+            Optionally, the name of a column in the sections that contains unique values to be used to separate the
+             generation of absences into blocks. For example, to generate absences on a yearly basis or on a
+             regional basis. If using block, how must also be specified.
+        how : str, optional, default None
+            If using block, how the number of absences to be generated per block is calculated. Must be one of the
+             following:
+                'target' : the number of absences per block will be equal to the target
+                'average': the number of absences for all blocks will be the target divided by the number of blocks
+                 (rounded up if there is a remainder)
+                'effort': the number of absences will be the target divided proportionally by the amount of survey
+                 effort (measured as length of the sections) per block
+                'presences': the number of absences per block will be equal to the corresponding number of presences
+                 multiplied by the target (e.g., if a block has 19 presences and target=2, then 38 absences will be
+                 generated for that block); note that presences must also be input if using this option
+        presences : GeoDataFrame, optional, default None
+            If using block and how='presences', the presences GeoDataFrame on which to base the number of absences. Note
+             that the presences must contain the same block column as the sections.
     Returns:
         GeoDataFrame
             Returns a GeoDataFrame containing the absences.
@@ -921,77 +1032,72 @@ def absences_delimit(
     check_dtype(par='target', obj=target, dtypes=int)
     check_dtype(par='dfls', obj=dfls, dtypes=list, none_allowed=True)
 
-    # make absence lines (lines from which absences are drawn
+    # assign presence zones to sections
     if len(presencezones) == 1:  # if all sections have the same presence zones (i.e., no temporal dimension)
-        absencelines = sections[['section_id', 'datetime', 'geometry']].copy()  # copy the sections
-        absencelines['presencezones'] = presencezones['presencezones'][0]  # add presence zones
+        sections_pzs = sections.copy()  # copy the sections
+        sections_pzs['presencezones'] = presencezones['presencezones'][0]  # add presence zones
     else:  # sections have different presence zones
-        absencelines = pd.merge(left=sections[['section_id', 'datetime', 'geometry']],  # merge sections to...
+        sections_pzs = pd.merge(left=sections,  # merge sections to...
                                 right=presencezones,  # ...corresponding presence zones
-                                on='section_id', how='left')
-    absencelines.rename_geometry('absencelines', inplace=True)  # rename geometry
-    absencelines['date'] = absencelines['datetime'].apply(  # get dates (if there are datetimes)
+                                on='section_id', how='left')  # ...by section ID
+    sections_pzs['date'] = sections_pzs['datetime'].apply(  # get dates (if there are datetimes)
         lambda dt: pd.to_datetime(dt.date()) if isinstance(dt, (datetime, pd.Timestamp)) else dt)
-    absencelines = absencelines[['section_id', 'date', 'absencelines', 'presencezones']]  # necessary
-    # absencelines is a GeoDataFrame
-    #   with columns: 'section_id', 'date', 'absencelines', 'presencezones'
-    #   of which, column 'absencelines' is the geometry column
 
-    # if using along-the-line variation, absence lines can be 'cookie-cuttered' to ensure absences are not within presence zones
-    if var in ['a', 'along']:
-        absencelines['absencelines'] = (
-            absencelines.apply(lambda r:  # take absence lines and presence zones and...
-                                r['absencelines'].difference(r['presencezones'])  # ...get the difference between them...
-                                if r['presencezones']  # ...but only if there are presence zones...
-                                else r['absencelines'], axis=1))  # ...otherwise absence lines are left as they were
+    if block is not None and how is not None:  # if block specified
+        check_dtype(par='block', obj=block, dtypes=str, none_allowed=True)
+        check_cols(df=sections_pzs, cols=block)
+        check_dtype(par='how', obj=how, dtypes=str, none_allowed=True)
+        check_opt(par='how', opt=how, opts=['target', 'average', 'effort', 'presences'])
+        if how in ['presences', 'p']:
+            check_dtype(par='presences', obj=presences, dtypes=gpd.GeoDataFrame)
 
-    absencelines['dfbal'] = absencelines.geometry.length.cumsum()  # calculate distance from beginning for each absence line
-    absencelines_all = absencelines.geometry.union_all()  # put all absences lines into single geometry
-    absences_list = []  # list for the absences
-    i = 0  # initialise i
-    while i < target:  # while count of absences is less than the target to be generated
-        # generate an absence point (depends on variation)
-        if var in ['a', 'along']:  # along-the-line variation - randomly sample point along absence lines
-            point = absencelines_all.interpolate(random.uniform(a=0, b=absencelines_all.length))  # interpolate point along absence lines
-            dfbal = line_locate_point(line=absencelines_all, other=point)  # get distance from beginning of absence lines to the point
-            absenceline = absencelines.iloc[absencelines[absencelines['dfbal'] > dfbal]['dfbal'].idxmin()]  # get absence line along which point lies
-            absences_list.append({  # append...
-                'point': point,  # ...point
-                'date': absenceline['date'],  # ...date
-                'dfbal': dfbal})  # ...distance from beginning of absence lines to point
-            i += 1  # increase the count
-        elif var in ['f', 'from']:  # from-the-line variation - randomly sample point from absence lines
-            dist = random.uniform(a=0, b=absencelines_all.length-0.001)  # randomly select distance along absence line
-            point_a = absencelines_all.interpolate(dist)  # make point at that distance
-            point_b = absencelines_all.interpolate(dist+0.001)  # make point at that distance plus a tiny (arbitrary) distance
-            dfl = random.choice(dfls)  # randomly select distance from the line
-            side = np.random.choice(['left', 'right'])  # randomly choose side
-            # generate a point at the specified distance from the line by...
-            #   ...making a tiny line from point a to point b - LineString([point_a, point_b])
-            #   ...making a line parallel to the tiny line at the specified distance on the randomly chosen side -
-            #       parallel_offset(distance=dfl, side=side)
-            #   ...getting the first coordinate of the parallel - extract_coords[0]
-            point = Point(LineString([point_a, point_b]).parallel_offset(distance=dfl, side=side).extract_coords[0])  # point
-            dfbal = line_locate_point(line=absencelines_all, other=point_a)  # get distance from beginning of absence lines to point a
-            absenceline = absencelines.iloc[absencelines[absencelines['dfbal'] > dfbal]['dfbal'].idxmin()]  # get absence line along which point a lies
-            if not point.intersects(absenceline['presencezones']):  # if point not in corresponding presence zones...
-                absences_list.append({  # ...append...
-                    'point': point,  # ...point
-                    'date': absenceline['date'],  # ...date
-                    'point_al': point_a,  # ...point a
-                    'dfbal': dfbal})  # ...distance from beginning of absence line to point a
-                i += 1  # increase the count
-        else:  # unrecognised variation (should not be reached given check_opt() above)
-            raise Exception
+        rate = target / float(sections_pzs.length.sum())  # calculate the rate (only nec if how='effort')
+        absences_list = []  # list for absences
+        for uniq in sections_pzs[block].unique():  # for each block
+            print(f'\nBlock: {str(uniq)}')  # print block value
+            sections_block = sections_pzs.copy()[sections_pzs[block] == uniq].reset_index(drop=True)  # subset sections
 
-    absences = gpd.GeoDataFrame(absences_list, geometry='point', crs=absencelines.crs)  # GeoDataFrame
-    absences = absences.sort_values(['date', 'dfbal']).reset_index(drop=True)  # sort by date and distance
-    absences['point_id'] = ['a' + str(i).zfill(len(str(target))) for i in range(1, target + 1)]  # create point IDs
-    if var in ['a', 'along']:  # along-the-line variation...
-        absences = absences[['point_id', 'point', 'date']]  # ...necessary columns
-    elif var in ['f', 'from']:  # from-the-line variation...
-        absences = absences[['point_id', 'point', 'date', 'point_al']]  # ...necessary columns
-    # print('Please ignore RuntimeWarning: invalid value encountered in line_locate_point')
+            # calculate the target for the block
+            if how in ['target', 't']:  # if how is target, block target is same as target
+                target_block = target
+            elif how in ['average', 'a']:  # if how is average, block target is target divided by number of blocks
+                target_block = int(np.ceil(target / sections_pzs[block].nunique()))
+            elif how in ['effort', 'e']:  # if how is effort, block target is length of track in block x rate
+                target_block = int(np.ceil(sections_block.length.sum() * rate))
+            elif how in ['presences', 'p']:  # if how is presences, block target is number of presences in block
+                target_block = len(presences[presences[block] == uniq]) * target
+            else:  # should never be reached given check_opt() above
+                target_block = None
+
+            if target_block > 0:  # if block target more than 0 (can be 0 if how='presences' and no presences in block)
+                absences_block = generate_absences(  # generate absences
+                    sections=sections_block,
+                    var=var,
+                    target=target_block,
+                    dfls=dfls,
+                    limit=limit)
+                absences_block[block] = uniq  # add block value to absences
+                absences_list.append(absences_block)  # append absences for block to list
+
+        absences = pd.concat(absences_list).reset_index(drop=True)  # concat all absences
+
+    else:  # if block not specified
+        absences = generate_absences(  # generate absences
+            sections=sections_pzs,
+            var=var,
+            target=target,
+            dfls=dfls,
+            limit=limit)
+
+    absences = absences.sort_values(['date', 'dfbs']).reset_index(drop=True)  # sort by date and distance from beginning of sections
+    absences['point_id'] = ['a' + str(i).zfill(len(str(len(absences)))) for i in range(1, len(absences) + 1)]  # create point IDs
+
+    absences_cols = ['point_id', 'point', 'date', 'section_id', 'dfbs']  # columns to keep in order
+    if block is not None:  # if using block...
+        absences_cols = absences_cols + [block]  # ...add block to columns to keep
+    if var in ['f', 'from']:  # if using from-the-line variation...
+        absences_cols = absences_cols + ['point_al']  # ...add point_al to columns to keep
+    absences = absences[absences_cols]  # keep only necessary columns
     return absences
 
 
@@ -1339,74 +1445,124 @@ def samples_segment(segments: gpd.GeoDataFrame, datapoints: gpd.GeoDataFrame,
     return assigned, samples
 
 
-def samples_point(datapoints: gpd.GeoDataFrame, presences: gpd.GeoDataFrame, absences: gpd.GeoDataFrame,
-                  cols: list[str], sections: gpd.GeoDataFrame = None) -> gpd.GeoDataFrame:
+def assign_datapoints(
+        absences,
+        datapoints,
+        cols
+):
+    datapoints = get_dfb(trackpoints=datapoints, grouper=None, grouper_name='s')  # DFBS for each datapoint
+
+    crs = absences.crs  # get absences CRS
+    absences = pd.merge_asof(absences.sort_values('dfbs'),  # merge the absences...
+                             datapoints[['dfbs', 'datapoint_id'] + cols].sort_values('dfbs'),  # ...with datapoints...
+                             on='dfbs', direction='backward')  # ...by the nearest DFBS going backwards as...
+    # ...backwards merge selects nearest point PRIOR to the absence
+    #   assumption: conditions at absence are those of most recently recorded point, i.e., conditions remain those
+    #    of most recently recorded point till another point says otherwise
+    absences = gpd.GeoDataFrame(absences, geometry='point', crs=crs)  # GeoDataFrame
+    remove_cols(df=datapoints, cols='dfbs')  # remove DFBS from datapoints
+    return absences
+
+
+def samples_point(presences: gpd.GeoDataFrame, absences: gpd.GeoDataFrame,
+                  datapoints_p: gpd.GeoDataFrame = None, cols_p: list[str] = None,
+                  datapoints_a: gpd.GeoDataFrame = None, cols_a: list[str] = None,
+                  block: str = None) -> gpd.GeoDataFrame:
 
     """Resample datapoints using the point approach.
 
-    For each presence, gets data from its corresponding datapoint (i.e., the datapoint from which the presence was
-     derived).
-    Optionally, for each absence, gets the datapoint prior to it and assigns to the absence that datapoint’s data.
-     The ID of the prior datapoint is also added to the datapoint_id column. Note that this is only applicable if
-     presences zones were made from sections that were, in turn, made from datapoints with Sections.from_datapoints
-     and those datapoints.
     Concatenates the presences and absences and assigns them presence-absence values of 1 and 0, respectively.
+    Additionally, and optionally, for each presence, gets data from its corresponding datapoint (i.e., the datapoint
+     from which the presence was derived).
+    Additionally, and optionally, for each absence, gets the datapoint prior to it and assigns to the absence that
+     datapoint’s data. The ID of the prior datapoint is also added to the datapoint_id column. Note that this is only
+     applicable if absences were generated from sections that were, in turn, made from datapoints with
+     Sections.from_datapoints and those corresponding datapoints.
 
     Parameters:
-        datapoints : GeoDataFrame
-            The GeoDataFrame containing the datapoints.
         presences : GeoDataFrame
             The GeoDataFrame containing the presences.
         absences : GeoDataFrame
             The GeoDataFrame containing the absences.
-        cols : list
-            A list indicating which data columns to add to the presences and, if applicable, the absences.
-        sections : GeoDataFrame, optional, default None
-            If sections is specified, data will be added to the absences. The Sections object must contain the sections
-             from which the absences were derived. Only applicable for absences that were made from sections that were
-             made from datapoints with Sections.from_datapoints and those datapoints.
+        datapoints_p : DataPoints, optional, default None
+            If adding data to the presences, the DataPoints object containing the data. If specified, data will be added
+             to the presences, if not specified, data will not be added to the presences.
+        cols_p : list, optional, default None
+            If adding data to the presences, a list indicating which data columns in datapoints_p to add to the
+             presences.
+        datapoints_a : DataPoints, optional, default None
+            If adding data to the absences, the DataPoints object containing the data. If specified, data will be added
+             to the absences, if not specified, data will not be added to the absences. Note that adding data to
+             absences is only applicable for absences that were generated from sections that were made from datapoints
+             and those datapoints.
+        cols_a : list, optional, default None
+            If adding data to the absences, a list indicating which data columns in datapoints_a to add to the absences.
+        block : str, optional, default None
+            If adding data to absences, optionally, the name of a column in the datapoints and absences that contains
+             unique values to be used to separate the datapoints and absences into blocks in order to speed up the
+             assigning of data to absences. If block was used to delimit absences, it must be used here, if adding data
+             to absences.
 
     Returns:
         GeoDataFrame
             Returns a GeoDataFrame containing the samples.
     """
 
-    check_dtype(par='cols', obj=cols, dtypes=list)
-    check_cols(df=datapoints, cols=cols)
-    cols.remove('datapoint_id') if 'datapoint_id' in cols else None  # remove 'datapoint_id' if in cols
+    crs = presences.crs  # get presences CRS
 
     # datapoints to presences
-    crs = presences.crs  # get presences CRS
-    presences = pd.merge(left=presences,  # merge the presences...
-                         right=datapoints[['datapoint_id'] + cols],  # ...to selected columns of datapoints...
-                         how='left', on='datapoint_id')  # ...by matching their datapoint IDs
-    presences = gpd.GeoDataFrame(presences, geometry='point', crs=crs)  # GeoDataFrame
+    if datapoints_p is not None:
+        check_dtype(par='datapoints_p', obj=datapoints_p, dtypes=gpd.GeoDataFrame)
+        check_dtype(par='cols_p', obj=cols_p, dtypes=list)
+        check_cols(df=datapoints_p, cols=cols_p)
+        cols_p = [c for c in cols_p if c not in presences]  # remove cols already in presences
+
+        presences = pd.merge(left=presences,  # merge the presences...
+                             right=datapoints_p[['datapoint_id'] + cols_p],  # ...to selected columns of datapoints...
+                             how='left', on='datapoint_id')  # ...by matching their datapoint IDs
+        presences = gpd.GeoDataFrame(presences, geometry='point', crs=crs)  # GeoDataFrame
 
     # datapoints to absences
-    if sections is not None:  # if Sections provided
-        sections_lines = sections.geometry.union_all()  # sections to single geometry
-        absences['dfbsl'] = line_locate_point(line=sections_lines,  # DFBSL for each absence
-                                              other=absences['point_al'] if 'point_al' in absences else absences['point'])
-        datapoints = get_dfb(trackpoints=datapoints, grouper=None, grouper_name='sl')  # DFBSL for each datapoint
+    if datapoints_a is not None:
+        check_dtype(par='datapoints_a', obj=datapoints_a, dtypes=gpd.GeoDataFrame)
+        check_dtype(par='cols_a', obj=cols_a, dtypes=list)
+        check_cols(df=datapoints_a, cols=cols_a)
+        cols_a = [c for c in cols_a if c not in absences]  # remove cols already in absences
 
-        crs = absences.crs  # get absences CRS
-        absences = pd.merge_asof(absences.sort_values('dfbsl'),  # merge the thinned absences with datapoints by...
-                                 datapoints[['dfbsl', 'datapoint_id'] + cols].sort_values('dfbsl'),
-                                 on='dfbsl', direction='backward')  # ...the nearest DFBSLP going backwards as...
-        # ...backwards merge selects nearest point PRIOR to the absence
-        #   assumption: conditions at absence are those of most recently recorded point, i.e., conditions remain those
-        #    of most recently recorded point till another point says otherwise
-        absences = gpd.GeoDataFrame(absences, geometry='point', crs=crs)  # GeoDataFrame
-        remove_cols(df=datapoints, cols='dfbsl')  # remove DFBSL from datapoints
-        remove_cols(df=absences, cols='dfbsl')  # remove DFBSL from absences
+        if block is not None:  # if block specified
+            check_dtype(par='block', obj=block, dtypes=str, none_allowed=True)
+            check_cols(df=datapoints_a, cols=block)
+            check_cols(df=absences, cols=block)
+
+            absences_list = []
+            for uniq in absences[block].unique():  # for each unique block in the sections
+                datapoints_block = datapoints_a.copy()[datapoints_a[block] == uniq].reset_index(drop=True)
+                absences_block = absences.copy()[absences[block] == uniq].reset_index(drop=True)
+
+                if len(absences_block) > 0:  # if there are any corresponding absences
+                    absences_block = assign_datapoints(  # assign a datapoint to each absence
+                        absences=absences_block,
+                        datapoints=datapoints_block,
+                        cols=cols_a)
+                    absences_list.append(absences_block)
+
+            absences = pd.concat(absences_list).reset_index(drop=True)
+
+        else:
+            absences = assign_datapoints(  # assign a datapoint to each absence
+                absences=absences,
+                datapoints=datapoints_a,
+                cols=cols_a)
 
     # concat presences and absences
     presences['p-a'] = 1  # set presence-absence value
     absences['p-a'] = 0  # set presence-absence value
     samples = pd.concat([presences, absences]).reset_index(drop=True)  # concat presences and absences
     samples = samples[['point_id', 'point', 'date', 'datapoint_id', 'p-a'] +  # reorder columns
-                      [c for c in samples if c not in ['point_id', 'point', 'date', 'datapoint_id', 'p-a']]]
-    samples = gpd.GeoDataFrame(samples, geometry='point', crs=datapoints.crs)  # GeoDataFrame
+                      [c for c in samples if c not in ['point_id', 'point', 'date', 'datapoint_id', 'p-a',
+                                                       'section_id', 'dfbs']] +
+                      ['section_id', 'dfbs']]
+    samples = gpd.GeoDataFrame(samples, geometry='point', crs=crs)  # GeoDataFrame
     return samples
 
 
@@ -1517,7 +1673,7 @@ def samples_grid_se(sections: gpd.GeoDataFrame, cells: gpd.GeoDataFrame, periods
                             right=assigned_area,  # ...area measurements
                             on=['section_id', 'datetime', 'period_id', 'cell_id'], how='outer')
         samples_area = (assigned_area.copy().groupby(['cell_id', 'period_id']).  # group by cell-period...
-                          agg(agg_dict).reset_index())  # ...and sum measurements
+                        agg(agg_dict).reset_index())  # ...and sum measurements
         samples = pd.merge(left=samples,  # merge samples skeleton...
                            right=samples_area,  # ...to area samples
                            on=['cell_id', 'period_id'], how='outer')
@@ -1880,4 +2036,3 @@ def calculate_area_udf(esw: int | float, interval: int | float, dfunc: typing.Ca
                 probabilities[0] * (interval / 2) +  # first and...
                 probabilities[-1] * (interval / 2))  # last probabilities which are multiplied by half interval
     return area_udf
-

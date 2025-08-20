@@ -552,8 +552,7 @@ class Periods:
             name='periods-' + str(int(num)) + unit[0],
             parameters={
                 'periods_tz': tz,
-                'periods_extent': periods['date_beg'].min().strftime('%Y-%m-%d') + '-' +
-                                  periods['date_end'].max().strftime('%Y-%m-%d'),
+                'periods_extent': periods['date_beg'].min().strftime('%Y-%m-%d') + '-' + periods['date_end'].max().strftime('%Y-%m-%d'),
                 'periods_extent_source': source,
                 'periods_number': num,
                 'periods_unit': unit})
@@ -730,7 +729,6 @@ class Cells:
             input_parameters['cells_crs'] = str(crs_working)  # update parameter
 
         return cls(cells=input_cells, name=basename, parameters=input_parameters)
-
 
     def plot(self, datapoints: DataPoints = None, sections: Sections = None):
 
@@ -971,10 +969,8 @@ class Segments:
 
 
 class Presences:
-    def __init__(self, full, kept, removed, name, parameters):
-        self.full = full
-        self.kept = kept
-        self.removed = removed
+    def __init__(self, presences, name, parameters):
+        self.presences = presences
         self.name = name
         self.parameters = parameters
 
@@ -982,7 +978,8 @@ class Presences:
     def delimit(  # wrapper of presences_delimit()
             cls,
             datapoints: DataPoints,
-            presence_col: str = None):
+            presence_col: str = None,
+            block: str = None):
 
         """Delimit presences.
 
@@ -997,21 +994,23 @@ class Presences:
                 The name of the column containing the values that determine which points are presences (e.g., a column
                  containing a count of individuals). This column must contain only integers or floats. Only needs to be
                  specified if the DataPoints object includes points that are not presences.
+            block : str, optional, default None
+                Optionally, the name of a column that contains unique values to be used to separate the presences into
+                 blocks. These blocks can then be used later when generating absences.
 
         Returns:
             Presences
-                Returns a Presences object with three attributes: name, parameters and full.
+                Returns a Presences object with three attributes: name, parameters and presences.
         """
 
-        full = presences_delimit(
+        presences = presences_delimit(
             datapoints=datapoints.datapoints,
-            presence_col=presence_col)
+            presence_col=presence_col,
+            block=block)
 
-        crs = full.crs
+        crs = presences.crs
         return cls(
-            full=full,
-            kept=None,
-            removed=None,
+            presences=presences,
             name='presences-' + datapoints.name[11:],
             parameters={'presences_crs': str(crs)})
 
@@ -1037,23 +1036,9 @@ class Presences:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        full = open_file(folder + basename + '-full.gpkg')
-        full.rename_geometry('point', inplace=True)
-        full = full[['point_id', 'point', 'date', 'datapoint_id']]
-        try:
-            kept = open_file(folder + basename + '-kept.gpkg')
-            kept.rename_geometry('point', inplace=True)
-            kept = kept[['point_id', 'point', 'date', 'datapoint_id']]
-        except FileNotFoundError:
-            print('Warning: kept points not found. Presences object will be made without kept attribute.')
-            kept = None
-        try:
-            removed = open_file(folder + basename + '-removed.gpkg')
-            removed.rename_geometry('point', inplace=True)
-            removed = removed[['point_id', 'point', 'date', 'datapoint_id']]
-        except FileNotFoundError:
-            print('Warning: removed points not found. Presences object will be made without removed attribute.')
-            removed = None
+        points = open_file(folder + basename + '-points.gpkg')
+        points.rename_geometry('point', inplace=True)
+        points = points[['point_id', 'point', 'date', 'datapoint_id']]
 
         try:
             input_parameters = open_file(folder + basename + '-parameters.csv')
@@ -1064,70 +1049,12 @@ class Presences:
 
         if crs_working is not None:  # if CRS provided
             check_crs(par='crs_working', crs=crs_working)
-            full = reproject_crs(gdf=full, crs_target=crs_working)  # reproject
-            kept = reproject_crs(gdf=kept, crs_target=crs_working) if isinstance(kept, gpd.GeoDataFrame) else None
-            removed = reproject_crs(gdf=removed, crs_target=crs_working) if isinstance(removed, gpd.GeoDataFrame) else None
+            points = reproject_crs(gdf=points, crs_target=crs_working)  # reproject
             input_parameters['presences_crs'] = str(crs_working)  # update parameter
 
-        return cls(full=full, kept=kept, removed=removed, name=basename, parameters=input_parameters)
+        return cls(presences=points, name=basename, parameters=input_parameters)
 
-    def thin(
-            self,
-            sp_threshold: int | float,
-            tm_threshold: int | float,
-            tm_unit: str = 'day',
-            target: int = None):
-
-        """Spatiotemporally thin the presences.
-
-        Spatiotemporally thin the presences so that no two presences are within some spatial threshold and/or within
-         some temporal threshold of each other.
-        If only a spatial threshold is specified, spatial thinning will be conducted. If only a temporal threshold is
-         specified, temporal thinning will be conducted. If both a spatial and a temporal threshold are specified,
-         spatiotemporal thinning will be conducted.
-        Adds to the Presences object two attributes — Presences.kept and Presences.removed — that are both
-         geopandas.GeoDataFrame containing the points that were kept and those that were removed after spatiotemporal
-         thinning, respectively.
-
-        Parameters:
-            sp_threshold : int | float, optional, default None
-                The spatial threshold to use for spatial and spatiotemporal thinning in the units of the CRS.
-            tm_threshold : int | float, optional, default None
-                The temporal threshold to use for temporal and spatiotemporal thinning in the units set with tm_unit.
-            tm_unit : str, optional, default 'day'
-                The temporal units to use for temporal and spatiotemporal thinning. One of the following:
-                    'year': year (all datetimes from the same year will be given the same value)
-                    'month': month (all datetimes from the same month and year will be given the same value)
-                    'day': day (all datetimes with the same date will be given the same value)
-                    'hour': hour (all datetimes in the same hour on the same date will be given the same value)
-                    'moy': month of the year (i.e., January is 1, December is 12 regardless of the year)
-                    'doy': day of the year (i.e., January 1st is 1, December 31st is 365 regardless of the year
-            target : int, optional, default None
-                The target number of presences. If, after thinning, the number of presences is greater than the target,
-                 the kept presences will be randomly sampled to reduce their number to the target.
-        """
-
-        kept = thinst(
-            df=self.full,
-            coords='point',
-            sp_threshold=sp_threshold,
-            datetimes='date',
-            tm_threshold=tm_threshold,
-            tm_unit=tm_unit)
-
-        if target is not None:
-            check_dtype(par='target', obj=target, dtypes=int)
-            if len(kept) > target:
-                kept = kept.sample(target)
-        kept = kept.sort_values('point_id')
-
-        self.kept = kept
-        self.removed = self.full.copy().loc[~self.full['point_id'].isin(self.kept['point_id'])]
-        self.parameters = self.parameters | {'presences_sp_threshold': sp_threshold,
-                                             'presences_tm_threshold': tm_threshold,
-                                             'presences_tm_unit': tm_unit}
-
-    def plot(self, sp_threshold: int | float = None, which: str = 'full'):
+    def plot(self, sp_threshold: int | float = None):
 
         """Plot the presences.
 
@@ -1135,42 +1062,22 @@ class Presences:
 
         Parameters:
             sp_threshold : int | float, optional, default None
-                The spatial threshold used for spatial and spatiotemporal thinning in the units of the CRS. If
+                The spatial threshold used for generating absences in the units of the CRS. If
                  specified, the plot will add a circle around each point to represent the spatial threshold.
-            which : { 'full', 'kept', 'removed', 'thinned'}, optional, default 'full'
-                A keyword to indicate which set of points to plot. Must be one of the following:
-                    'full': all the presences (in blue)
-                    'kept': the presences kept after thinning (in blue)
-                    'removed': the presences removed after thinning (in yellow)
-                    'thinned': the presences kept after thinning (in blue) and those removed after thinning  (in yellow)
         """
 
         check_dtype(par='sp_threshold', obj=sp_threshold, dtypes=[int, float], none_allowed=True)
-        check_dtype(par='which', obj=which, dtypes=str)
-        check_opt(par='which', opt=which, opts=['full', 'kept', 'removed', 'thinned'])
 
         fig, ax = plt.subplots(figsize=(16, 8))
         buffer = sp_threshold/2 if isinstance(sp_threshold, (int, float)) else None
-        if which == 'full':
-            presences_plot(ax=ax, points=self.full, buffer=buffer)
-        elif which == 'kept':
-            presences_plot(ax=ax, points=self.kept, buffer=buffer)
-        elif which == 'removed':
-            presences_removed_plot(ax=ax, points=self.removed, buffer=buffer)
-        elif which == 'thinned':
-            presences_plot(ax=ax, points=self.kept, buffer=buffer)
-            presences_removed_plot(ax=ax, points=self.removed, buffer=buffer)
-        else:
-            pass
+        presences_plot(ax=ax, points=self.presences, buffer=buffer)
 
     def save(self, folder: str, crs_output: str | int | pyproj.crs.crs.CRS = None):
 
         """Save the presences.
 
-        Saves the full, kept, and removed presences as GPKG files. The name of the saved files will be the name of the
-         Presences object plus '-full', '-kept', and '-removed', respectively. Note that the kept and removed presences
-         will only be saved if they have been made with Presences.thin. Additionally, the parameters will be output as
-         a CSV with the same name plus '-parameters'.
+        Saves the presences as a GPKG file. The name of the saved file will be the name of the Presences object plus
+         '-point'. Additionally, the parameters will be output as a CSV with the same name plus '-parameters'.
 
         Parameters:
             folder : str
@@ -1185,32 +1092,16 @@ class Presences:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        output_full = self.full.copy()  # copy full presences GeoDataFrame
+        output_presences = self.presences.copy()  # copy presences GeoDataFrame
         output_parameters = self.parameters.copy()  # copy parameters
 
         if crs_output is not None:  # if an output CRS is provided
             check_crs(par='crs_output', crs=crs_output)
-            output_full = reproject_crs(gdf=output_full, crs_target=crs_output)  # reproject
+            output_presences = reproject_crs(gdf=output_presences, crs_target=crs_output)  # reproject
             output_parameters['presences_crs'] = str(crs_output)  # update parameter
-        output_full['date'] = output_full['date'].apply(  # convert date to string if datetime
+        output_presences['date'] = output_presences['date'].apply(  # convert date to string if datetime
             lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
-        output_full.to_file(folder + '/' + self.name + '-full.gpkg')  # output full presences
-
-        if isinstance(self.kept, gpd.GeoDataFrame):  # if kept presences...
-            output_kept = self.kept.copy()  # copy kept presences GeoDataFrame
-            if crs_output is not None:  # if an output CRS is provided
-                output_kept = reproject_crs(gdf=output_kept, crs_target=crs_output)  # reproject
-            output_kept['date'] = output_kept['date'].apply(  # convert date to string if datetime
-                lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
-            output_kept.to_file(folder + '/' + self.name + '-kept.gpkg')  # output kept presences
-
-        if isinstance(self.removed, gpd.GeoDataFrame):  # if removed presences...
-            output_removed = self.removed.copy()  # copy removed presences GeoDataFrame
-            if crs_output is not None:  # if an output CRS is provided
-                output_removed = reproject_crs(gdf=output_removed, crs_target=crs_output)  # reproject
-            output_removed['date'] = output_removed['date'].apply(  # convert date to string if datetime
-                lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
-            output_removed.to_file(folder + '/' + self.name + '-removed.gpkg')  # output removed presences
+        output_presences.to_file(folder + '/' + self.name + '-points.gpkg')  # output presences
 
         output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
         output_parameters.columns = ['parameter', 'value']  # rename columns
@@ -1226,31 +1117,36 @@ class PresenceZones:
     @classmethod
     def delimit(  # wrapper of presencezones_delimit()
             cls,
-            presences: Presences,
+            presences: Presences | list[Presences],
             sections: Sections,
             sp_threshold: int | float = None,
             tm_threshold: int | float = None,
             tm_unit: str | None = None):
 
-        """Delimit presences zones.
+        """Delimit presence zones.
 
         From the presences, use a spatial and, optionally, temporal threshold to make presences zones.
-        Presence zones are zones around presences that are deemed to be ‘occupied’ by the animals. Spatial and temporal
-         thresholds determine the extent of these occupied zones.
-        Additionally, the presence zones correspond to sections — specifically, the sections that they overlap spatially
+        Presence zones are zones around presences that are deemed to be ‘occupied’ by the animals. Absences will not be
+         generated within the presence zones, thus they serve to ensure that absences are generated sufficiently far
+         from presences.
+        Spatial and temporal thresholds determine the extent of the presence zones. The spatial threshold represents
+         the radius and the temporal threshold the number of units (e.g., days) before and after that of the presence.
+         For example, a spatial threshold of 10 000 m and a temporal threshold of 5 days means that no absence will be
+         generated within 10 000 m and 5 days of any presence.
+        Note that the presence zones correspond to sections — specifically, the sections that they overlap spatially
          and, optionally, temporally with, as determined by the spatial and temporal thresholds.
 
         Parameters:
             presences : Presences
-                The Presences object containing the presences from which the presences zones are to be made.
+                The Presences object containing the presences from which the presence zones are to be made.
             sections : Sections
-                The Sections object containing the sections to which the presences zones correspond.
+                The Sections object containing the sections to which the presence zones correspond.
             sp_threshold : int | float, optional, default None
-                The spatial threshold to use for making the presences zones in the units of the CRS.
+                The spatial threshold to use for making the presence zones in the units of the CRS.
             tm_threshold : int | float, optional, default None
-                The temporal threshold to use for making the presences zones in the units set with tm_unit.
+                The temporal threshold to use for making the presence zones in the units set with tm_unit.
             tm_unit : str, optional, default 'day'
-                The temporal units to use for making the presences zones. One of the following:
+                The temporal units to use for making the presence zones. One of the following:
                     'year': year (all datetimes from the same year will be given the same value)
                     'month': month (all datetimes from the same month and year will be given the same value)
                     'day': day (all datetimes with the same date will be given the same value)
@@ -1264,7 +1160,7 @@ class PresenceZones:
 
         presencezones = presencezones_delimit(
             sections=sections.sections,
-            presences=presences.full,
+            presences=pd.concat([p.presences for p in presences]) if isinstance(presences, list) else presences.presences,
             sp_threshold=sp_threshold,
             tm_threshold=tm_threshold,
             tm_unit=tm_unit)
@@ -1327,27 +1223,27 @@ class PresenceZones:
 
     def plot(self, sections: Sections = None, presences: Presences = None):
 
-        """Plot the presences zones.
+        """Plot the presence zones.
 
-        Makes a basic matplotlib plot of the presences zones.
+        Makes a basic matplotlib plot of the presence zones.
 
         Parameters:
             sections : Sections, optional, default None
-                Optionally, a Sections object with sections to be plotted with the presences zones.
+                Optionally, a Sections object with sections to be plotted with the presence zones.
             presences : Presences, optional, default None
-                Optionally, a Presences object with presences to be plotted with the presences zones.
+                Optionally, a Presences object with presences to be plotted with the presence zones.
         """
 
         fig, ax = plt.subplots(figsize=(16, 8))
         presencezones_plot(ax, self.presencezones)
         sections_plot(ax, sections.sections) if isinstance(sections, Sections) else None
-        presences_plot(ax, presences.full, buffer=self.parameters['absences_sp_threshold']) if isinstance(presences, Presences) else None
+        presences_plot(ax, presences.presences, buffer=self.parameters['absences_sp_threshold']) if isinstance(presences, Presences) else None
 
     def save(self, folder: str, crs_output: str | int | pyproj.crs.crs.CRS = None):
 
-        """Save the presences zones.
+        """Save the presence zones.
 
-        Saves the presences zones GeoDataFrame as a GPKG. The name of the saved file will be the name of the
+        Saves the presence zones GeoDataFrame as a GPKG. The name of the saved file will be the name of the
          PresenceZones object. Additionally, the parameters will be output as a CSV with the same name plus
          '-parameters'.
 
@@ -1355,7 +1251,7 @@ class PresenceZones:
             folder : str
                 The path to the output folder where the output files will be saved
             crs_output : str | int | pyproj.CRS, optional, default None
-                The CRS to reproject the presences zones to before saving (only reprojects the presences zones that are
+                The CRS to reproject the presence zones to before saving (only reprojects the presence zones that are
                  saved and not the PresenceZones object). The CRS must be either: a pyproj.CRS; a string in a format
                  accepted by pyproj.CRS.from_user_input (e.g., 'EPSG:4326'); or an integer in a format accepted by
                  pyproj.CRS.from_user_input (e.g., 4326).
@@ -1380,10 +1276,8 @@ class PresenceZones:
 
 
 class Absences:
-    def __init__(self, full, kept, removed, name, parameters):
-        self.full = full
-        self.kept = kept
-        self.removed = removed
+    def __init__(self, absences, name, parameters):
+        self.absences = absences
         self.name = name
         self.parameters = parameters
 
@@ -1394,17 +1288,22 @@ class Absences:
             presencezones: PresenceZones,
             var: str,
             target: int | float,
-            dfls: list[int | float] = None):
+            limit: int = 10,
+            dfls: list[int | float] = None,
+            block: str = None,
+            how: str = None,
+            presences: Presences = None
+    ):
 
         """Delimit the absences.
 
         Absences can be generated by one of two variations: the 'along-the-line' variation or the 'from-the-line'
          variation.
         In the along-the-line variation, each absence is generated by randomly placing a point along the survey track,
-         provided it is not within the corresponding presences zones.
+         provided it is not within the corresponding presence zones.
         In the from-the-line variation, each absence is generated by randomly placing a point along the survey track and
          then placing a second point a certain distance from the first point perpendicular to the track, provided that
-         this second point is not within the corresponding presences zones. The distance from the track is selected from
+         this second point is not within the corresponding presence zones. The distance from the track is selected from
          a list of candidate distances that can be generated in any way, including from a predefined distribution (e.g.,
          a detection function) by using the function generate_dfls.
 
@@ -1412,7 +1311,7 @@ class Absences:
             sections : Sections
                 The Sections object containing the sections used to generate the absences.
             presencezones : PresenceZones
-                The PresenceZones object containing the presences zones used to generate the absences.
+                The PresenceZones object containing the presence zones used to generate the absences.
             var : {'along', 'from'}
                 The variation to use to generate the absences. Must be one of the following:
                     'along': along-the-line - the absences are generated by randomly placing a point along the surveyed
@@ -1421,30 +1320,59 @@ class Absences:
                      line and then, secondly, placing a point a certain distance from the first point perpendicular to
                      the line ('f' also accepted)
             target : int | float
-                The target number of absences to be generated. Note that, during thinning, some absences may be removed
-                 so, to account for this, the target should be set higher than the number desired.
+                The total number of absences to be generated.
+                Note that if using block, the number of absences generated will likely be slightly higher than the
+                 target due to rounding.
+                Note that if using block and how='presences', the target is a factor to multiply the number of presences
+                 by.
+                Note that, during thinning (optionally conducted later on a Samples object), some absences may be
+                 removed so, to account for this, the target should be set higher than the final number desired.
+            limit : int, optional, default 10
+                The value that is multiplied by the target to get the maximum potential number of points (e.g., if
+                 target=100 and limit=10, a maximum of 1000 points can be generated). If the maximum number is reached
+                 (or the target number of absences is reached), further absence generation is abandoned and those
+                 absences that have been made are returned.
             dfls : list[int | float], optional, default None
                 If using the from-the-line variation, a list of candidate distances from the line to use when generating
                  absences. For each absence, one of these distances will be chosen at random and used to place the
                  absence at that distance from the survey line. These distances can be generated in any way, including
                  from a predefined distribution (e.g., a detection function) with the function generate_dfls.
-
+            block : str, optional, default None
+                Optionally, the name of a column in the sections that contains unique values to be used to separate the
+                 generation of absences into blocks. For example, to generate absences on a yearly basis or on a
+                 regional basis. If using block, how must also be specified.
+            how : str, optional, default None
+                If using block, how the number of absences to be generated per block is calculated. Must be one of the
+                 following:
+                    'target' : the number of absences per block will be equal to the target
+                    'average': the number of absences for all blocks will be the target divided by the number of blocks
+                     (rounded up if there is a remainder)
+                    'effort': the number of absences will be the target divided proportionally by the amount of survey
+                     effort (measured as length of the sections) per block
+                    'presences': the number of absences per block will be equal to the corresponding number of presences
+                     multiplied by the target (e.g., if a block has 19 presences and target=2, then 38 absences will be
+                     generated for that block); note that presences must also be input if using this option
+            presences : Presences, optional, default None
+                If using block and how='presences', the Presences object on which to base the number of absences. Note
+                 that the presences must contain the same block column as the sections.
         Returns:
             Absences
-                Returns an Absences object with three attributes: name, parameters and full.
+                Returns an Absences object with three attributes: name, parameters and absences.
         """
 
-        full = absences_delimit(
+        absences = absences_delimit(
             sections=sections.sections,
             presencezones=presencezones.presencezones,
             var=var,
             target=target,
-            dfls=dfls)
+            limit=limit,
+            dfls=dfls,
+            block=block,
+            how=how,
+            presences=presences.presences if isinstance(presences, Presences) else None)
 
         return cls(
-            full=full,
-            kept=None,
-            removed=None,
+            absences=absences,
             name='absences-' + var[0] + presencezones.name[12:],
             parameters={'absences_var': var, 'absences_target': target} | presencezones.parameters)
 
@@ -1453,7 +1381,7 @@ class Absences:
 
         """Open a saved Absences object.
 
-        Open an Absences object that has previously been saved with Absences.save().
+        Open a Absences object that has previously been saved with Absences.save().
 
         Parameters:
             folder : str
@@ -1470,23 +1398,9 @@ class Absences:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        full = open_file(folder + basename + '-full.gpkg')
-        full.rename_geometry('point', inplace=True)
-        full = full[['point_id', 'point', 'date']]
-        try:
-            kept = open_file(folder + basename + '-kept.gpkg')
-            kept.rename_geometry('point', inplace=True)
-            kept = kept[['point_id', 'point', 'date']]
-        except FileNotFoundError:
-            print('Warning: kept points not found. Absences object will be made without kept attribute.')
-            kept = None
-        try:
-            removed = open_file(folder + basename + '-removed.gpkg')
-            removed.rename_geometry('point', inplace=True)
-            removed = removed[['point_id', 'point', 'date']]
-        except FileNotFoundError:
-            print('Warning: removed points not found. Absences object will be made without removed attribute.')
-            removed = None
+        points = open_file(folder + basename + '-points.gpkg')
+        points.rename_geometry('point', inplace=True)
+        points = points[['point_id', 'point', 'date', 'datapoint_id']]
 
         try:
             input_parameters = open_file(folder + basename + '-parameters.csv')
@@ -1497,70 +1411,12 @@ class Absences:
 
         if crs_working is not None:  # if CRS provided
             check_crs(par='crs_working', crs=crs_working)
-            full = reproject_crs(gdf=full, crs_target=crs_working)  # reproject
-            kept = reproject_crs(gdf=kept, crs_target=crs_working) if isinstance(kept, gpd.GeoDataFrame) else None
-            removed = reproject_crs(gdf=removed, crs_target=crs_working) if isinstance(removed, gpd.GeoDataFrame) else None
+            points = reproject_crs(gdf=points, crs_target=crs_working)  # reproject
             input_parameters['absences_crs'] = str(crs_working)  # update parameter
 
-        return cls(full=full, kept=kept, removed=removed, name=basename, parameters=input_parameters)
+        return cls(absences=points, name=basename, parameters=input_parameters)
 
-    def thin(
-            self,
-            sp_threshold: int | float,
-            tm_threshold: int | float,
-            tm_unit: str = 'day',
-            target: int = None):
-
-        """Spatiotemporally thin the absences.
-
-        Spatiotemporally thin the absences so that no two absences are within some spatial threshold and/or within some
-         temporal threshold of each other.
-        If only a spatial threshold is specified, spatial thinning will be conducted. If only a temporal threshold is
-         specified, temporal thinning will be conducted. If both a spatial and a temporal threshold are specified,
-         spatiotemporal thinning will be conducted.
-        Adds to the Absences object two attributes — Absences.kept and Absences.removed — that are both
-         geopandas.GeoDataFrame containing the points that were kept and those that were removed after spatiotemporal
-         thinning, respectively.
-
-        Parameters:
-            sp_threshold : int | float, optional, default None
-                The spatial threshold to use for spatial and spatiotemporal thinning in the units of the CRS.
-            tm_threshold : int | float, optional, default None
-                The temporal threshold to use for temporal and spatiotemporal thinning in the units set with tm_unit.
-            tm_unit : str, optional, default 'day'
-             The temporal units to use for temporal and spatiotemporal thinning. One of the following:
-                    'year': year (all datetimes from the same year will be given the same value)
-                    'month': month (all datetimes from the same month and year will be given the same value)
-                    'day': day (all datetimes with the same date will be given the same value)
-                    'hour': hour (all datetimes in the same hour on the same date will be given the same value)
-                    'moy': month of the year (i.e., January is 1, December is 12 regardless of the year)
-                    'doy': day of the year (i.e., January 1st is 1, December 31st is 365 regardless of the year
-            target : int, optional, default None
-                The target number of absences. If, after thinning, the number of absences is greater than the target,
-                 the kept absences will be randomly sampled to reduce their number to the target.
-        """
-
-        kept = thinst(
-            df=self.full,
-            coords='point',
-            sp_threshold=sp_threshold,
-            datetimes='date',
-            tm_threshold=tm_threshold,
-            tm_unit=tm_unit)
-
-        if target is not None:
-            check_dtype(par='target', obj=target, dtypes=int)
-            if len(kept) > target:
-                kept = kept.sample(target)
-        kept = kept.sort_values('point_id')
-
-        self.kept = kept
-        self.removed = self.full.copy().loc[~self.full['point_id'].isin(self.kept['point_id'])]
-        self.parameters = self.parameters | {'absences_sp_threshold': sp_threshold,
-                                             'absences_tm_threshold': tm_threshold,
-                                             'absences_tm_unit': tm_unit}
-
-    def plot(self, sp_threshold: int | float = None, which: str = 'full', presencezones: PresenceZones = None):
+    def plot(self, sp_threshold: int | float = None):
 
         """Plot the absences.
 
@@ -1568,52 +1424,29 @@ class Absences:
 
         Parameters:
             sp_threshold : int | float, optional, default None
-                The spatial threshold used for spatial and spatiotemporal thinning in the units of the CRS. If
-                 specified, the plot will add a circle around each point to represent the spatial threshold.
-            which : { 'full', 'kept', 'removed', 'thinned'}, optional, default 'full'
-                A keyword to indicate which set of points to plot. Must be one of the following:
-                    'full': all the absences (in red)
-                    'kept': the absences kept after thinning (in red)
-                    'removed': the absences removed after thinning (in yellow)
-                    'thinned': the absences kept after thinning (in red) and those removed after thinning (in yellow)
-            presencezones : PresenceZones, optional, default None
-                Optionally, an PresenceZones object with presences zones to be plotted with the absences.
+                The spatial threshold used for generating absences in the units of the CRS. If specified, the plot will
+                 add a circle around each point to represent the spatial threshold.
         """
 
         check_dtype(par='sp_threshold', obj=sp_threshold, dtypes=[int, float], none_allowed=True)
-        check_dtype(par='which', obj=which, dtypes=str)
-        check_opt(par='which', opt=which, opts=['full', 'kept', 'removed', 'thinned'])
 
         fig, ax = plt.subplots(figsize=(16, 8))
-        buffer = sp_threshold/2 if isinstance(sp_threshold, (int, float)) else None
-        if which == 'full':
-            absences_plot(ax=ax, points=self.full, buffer=buffer)
-        elif which == 'kept':
-            absences_plot(ax=ax, points=self.kept, buffer=buffer)
-        elif which == 'removed':
-            absences_removed_plot(ax=ax, points=self.removed, buffer=buffer)
-        elif which == 'thinned':
-            absences_plot(ax=ax, points=self.kept, buffer=buffer)
-            absences_removed_plot(ax=ax, points=self.removed, buffer=buffer)
-        else:
-            pass
-        presencezones_plot(ax=ax, zones=presencezones.presencezones) if isinstance(presencezones, PresenceZones) else None
+        buffer = sp_threshold / 2 if isinstance(sp_threshold, (int, float)) else None
+        absences_plot(ax=ax, points=self.absences, buffer=buffer)
 
     def save(self, folder: str, crs_output: str | int | pyproj.crs.crs.CRS = None):
 
         """Save the absences.
 
-        Saves the full, kept, and removed absences as GPKG files. The name of the saved files will be the name of the
-         Absences object plus '-full', '-kept', and '-removed', respectively. Note that the kept and removed absences
-         will only be saved if they have been made with Absences.thin. Additionally, the parameters will be output as a
-         CSV with the same name plus '-parameters'.
+        Saves the absences as a GPKG file. The name of the saved file will be the name of the Absences object plus
+         '-point'. Additionally, the parameters will be output as a CSV with the same name plus '-parameters'.
 
         Parameters:
             folder : str
                 The path to the output folder where the output files will be saved
             crs_output : str | int | pyproj.CRS, optional, default None
-                The CRS to reproject the absences to before saving (only reprojects the absences that are saved and not
-                 the Absences object). The CRS must be either: a pyproj.CRS; a string in a format accepted by
+                The CRS to reproject the absences to before saving (only reprojects the absences that are saved and
+                 not the Presences object). The CRS must be either: a pyproj.CRS; a string in a format accepted by
                  pyproj.CRS.from_user_input (e.g., 'EPSG:4326'); or an integer in a format accepted by
                  pyproj.CRS.from_user_input (e.g., 4326).
         """
@@ -1621,34 +1454,19 @@ class Absences:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        output_full = self.full.copy()  # copy full presences GeoDataFrame
+        output_absences = self.absences.copy()  # copy absences GeoDataFrame
         output_parameters = self.parameters.copy()  # copy parameters
 
         if crs_output is not None:  # if an output CRS is provided
             check_crs(par='crs_output', crs=crs_output)
-            output_full = reproject_crs(gdf=output_full, crs_target=crs_output)  # reproject
+            output_absences = reproject_crs(gdf=output_absences, crs_target=crs_output)  # reproject
             output_parameters['absences_crs'] = str(crs_output)  # update parameter
-        output_full['date'] = output_full['date'].apply(  # convert date to string if datetime
+        output_absences['date'] = output_absences['date'].apply(  # convert date to string if datetime
             lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
-        output_full.to_file(folder + '/' + self.name + '-full.gpkg')  # output full presences
+        output_absences.to_file(folder + '/' + self.name + '-points.gpkg')  # output absences
 
-        if isinstance(self.kept, gpd.GeoDataFrame):  # if kept presences...
-            output_kept = self.kept.copy()  # copy kept presences GeoDataFrame
-            if crs_output is not None:  # if an output CRS is provided
-                output_kept = reproject_crs(gdf=output_kept, crs_target=crs_output)  # reproject
-            output_kept['date'] = output_kept['date'].apply(  # convert date to string if datetime
-                lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
-            output_kept.to_file(folder + '/' + self.name + '-kept.gpkg')  # output kept presences
-
-        if isinstance(self.removed, gpd.GeoDataFrame):  # if removed presences...
-            output_removed = self.removed.copy()  # copy removed presences GeoDataFrame
-            if crs_output is not None:  # if an output CRS is provided
-                output_removed = reproject_crs(gdf=output_removed, crs_target=crs_output)  # reproject
-            output_removed['date'] = output_removed['date'].apply(  # convert date to string if datetime
-                lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
-            output_removed.to_file(folder + '/' + self.name + '-removed.gpkg')  # output removed presences
-
-        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
+        output_parameters = pd.DataFrame(
+            {key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
         output_parameters.columns = ['parameter', 'value']  # rename columns
         output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
 
@@ -1662,12 +1480,12 @@ class Samples:
             samples,
             name,
             parameters,
-            assigned
     ):
         self.samples = samples
         self.name = name
         self.parameters = parameters
-        self.assigned = assigned
+        self.assigned = None
+        self.removed = None
 
     @classmethod
     def grid(  # wrapper around samples_grid()
@@ -1749,15 +1567,16 @@ class Samples:
             cols=cols,
             full=full)
 
-        return cls(
+        instance = cls(
             samples=samples,
             name='samples-' + datapoints.name + '-x-' + cells.name + '-x-' + periods_name,
             parameters={'approach': 'grid', 'resampled': 'datapoints'} |
                        {'datapoints_name': datapoints.name} | datapoints.parameters |
                        {'cells_name': cells.name} | cells.parameters |
                        {'periods_name': periods_name} | periods_parameters |
-                       {'cols': str(cols)},
-            assigned=assigned)
+                       {'cols': str(cols)})
+        instance.assigned = assigned
+        return instance
 
     @classmethod
     def segment(  # wrapper around sample_segment()
@@ -1826,67 +1645,81 @@ class Samples:
             cols=cols,
             how=how)
 
-        return cls(
+        instance = cls(
             samples=samples,
             name='samples-' + datapoints.name + '-x-' + segments.name,
             parameters={'approach': 'segment', 'resampled': 'datapoints'} |
                        {'datapoints_name': datapoints.name} | datapoints.parameters |
                        {'segments_name': segments.name} | segments.parameters |
-                       {'cols': str(cols)},
-            assigned=assigned)
+                       {'cols': str(cols)})
+        instance.assigned = assigned
+        return instance
 
     @classmethod
     def point(  # wrapper around sample_point()
             cls,
-            datapoints: DataPoints,
             presences: Presences,
             absences: Absences,
-            cols: list[str],
-            sections: Sections = None):
+            datapoints_p: DataPoints = None,
+            cols_p: list[str] = None,
+            datapoints_a: DataPoints = None,
+            cols_a: list[str] = None,
+            block: str = None):
 
         """Resample datapoints using the point approach.
 
-        For each presence, gets data from its corresponding datapoint (i.e., the datapoint from which the presence was
-         derived).
-        Optionally, for each absence, gets the datapoint prior to it and assigns to the absence that datapoint’s data.
-         The ID of the prior datapoint is also added to the datapoint_id column. Note that this is only applicable if
-         presences zones were made from sections that were, in turn, made from datapoints with Sections.from_datapoints
-         and those datapoints.
         Concatenates the presences and absences and assigns them presence-absence values of 1 and 0, respectively.
+        Additionally, and optionally, for each presence, gets data from its corresponding datapoint (i.e., the datapoint
+         from which the presence was derived).
+        Additionally, and optionally, for each absence, gets the datapoint prior to it and assigns to the absence that
+         datapoint’s data. The ID of the prior datapoint is also added to the datapoint_id column. Note that this is
+         only applicable if absences were generated from sections that were, in turn, made from datapoints with
+         Sections.from_datapoints and those corresponding datapoints.
 
         Parameters:
-            datapoints : DataPoints
-                The DataPoints object.
             presences : Presences
                 The Presences object.
             absences : Absences
                 The Absences object.
-            cols : list
-                A list indicating which data columns to add to the Presences and, if applicable, the Absences.
-            sections : Sections, optional, default None
-                If adding data to the absences, the Sections object from which the PresenceZones were derived (only
-                applicable for sections that were made from datapoints with Sections.from_datapoints and those
-                datapoints).
-
+            datapoints_p : DataPoints, optional, default None
+                If adding data to the presences, the DataPoints object containing the data. If specified, data will be
+                 added to the presences, if not specified, data will not be added to the presences.
+            cols_p : list, optional, default None
+                If adding data to the presences, a list indicating which data columns in datapoints_p to add to the
+                 presences.
+            datapoints_a : DataPoints, optional, default None
+                If adding data to the absences, the DataPoints object containing the data. If specified, data will be
+                 added to the absences, if not specified, data will not be added to the absences. Note that adding data
+                 to absences is only applicable for absences that were generated from sections that were made from
+                 datapoints and those datapoints.
+            cols_a : list, optional, default None
+                If adding data to the absences, a list indicating which data columns in datapoints_a to add to the
+                 absences.
+            block : str, optional, default None
+                If adding data to absences, optionally, the name of a column in the datapoints and absences that
+                 contains unique values to be used to separate the datapoints and absences into blocks in order to speed
+                 up the assigning of data to absences. If block was used to delimit absences, it must be used here, if
+                 adding data to absences.
         Returns:
             Samples
                 Returns a Samples object with three attributes: name, parameters, and samples.
         """
 
         samples = samples_point(
-            datapoints=datapoints.datapoints,
-            presences=presences.kept,
-            absences=absences.kept,
-            cols=cols,
-            sections=sections.sections if sections is not None else None)
+            presences=presences.presences,
+            absences=absences.absences,
+            datapoints_p=datapoints_p.datapoints if isinstance(datapoints_p, DataPoints) else None,
+            cols_p=cols_p,
+            datapoints_a=datapoints_a.datapoints if isinstance(datapoints_a, DataPoints) else None,
+            cols_a=cols_a,
+            block=block)
 
         return cls(
             samples=samples,
             name='samples-' + presences.name + '-+-' + absences.name,
             parameters={'approach': 'point', 'resampled': 'datapoints'} |
                        {'presences_name': presences.name} | presences.parameters |
-                       {'absences_name': absences.name} | absences.parameters,
-            assigned=None)
+                       {'absences_name': absences.name} | absences.parameters)
 
     @classmethod
     def grid_se(  # wrapper around sample_grid_se()
@@ -1962,15 +1795,16 @@ class Samples:
             euc_geo=euc_geo,
             full=full)
 
-        return cls(
+        instance = cls(
             samples=samples,
             name='samples-' + sections.name + '-x-' + cells.name + '-x-' + periods_name,
             parameters={'approach': 'grid', 'resampled': 'effort'} |
                        {'sections_name': sections.name} | sections.parameters |
                        {'cells_name': cells.name} | cells.parameters |
                        {'periods_name': periods_name} | periods_parameters |
-                       {'effort_esw': esw, 'effort_euc-geo': euc_geo},
-            assigned=assigned)
+                       {'effort_esw': esw, 'effort_euc-geo': euc_geo})
+        instance.assigned = assigned
+        return instance
 
     @classmethod
     def segment_se(  # wrapper around sample_segment_se()
@@ -2030,8 +1864,7 @@ class Samples:
             name='samples-' + segments.parameters['sections_name'] + '-x-' + segments.name,
             parameters={'approach': 'segment', 'resampled': 'effort'} |
                        {'segments_name': segments.name} | segments.parameters |
-                       {'effort_esw': esw, 'effort_audf': audf, 'effort_euc-geo': euc_geo},
-            assigned=None)
+                       {'effort_esw': esw, 'effort_audf': audf, 'effort_euc-geo': euc_geo})
 
     @classmethod
     def merge(cls, **kwargs):
@@ -2118,8 +1951,81 @@ class Samples:
         return cls(
             samples=merged,
             name=name,
-            parameters={'name': name, 'names': '+'.join([sample.name for sample in kwargs.values()])} | parameters,
-            assigned=None)
+            parameters={'name': name, 'names': '+'.join([sample.name for sample in kwargs.values()])} | parameters)
+
+    def thin(
+            self,
+            coords: str = None,
+            sp_threshold: int | float = None,
+            datetimes: str = None,
+            tm_threshold: int | float = None,
+            tm_unit: str = 'day',
+            block: str = None):
+
+        """Spatiotemporally thin the samples.
+
+        Spatially, temporally, or spatiotemporally thin the samples so that no two samples are within some spatial
+         threshold and/or within some temporal threshold of each other.
+        If only a spatial threshold is specified, spatial thinning will be conducted. If only a temporal threshold is
+         specified, temporal thinning will be conducted. If both a spatial and a temporal threshold are specified,
+         spatiotemporal thinning will be conducted.
+        Modifies the attribute Samples.samples to contain only those samples kept after thinning. Those samples removed
+         after thinning are placed in a new attribute: Samples.removed.
+
+        Parameters:
+            coords : str, optional, default None
+                The name of the column in the samples containing the geometries to use for thinning. Depending on the
+                 approach used to generate the samples, this column should be one of the following:
+                    grid approach: 'centroid'
+                    segment approach: 'midpoint'
+                    point approach: 'point'
+            sp_threshold : int | float, optional, default None
+                The spatial threshold to use for spatial and spatiotemporal thinning in the units of the CRS.
+            datetimes : str, optional, default None
+                The name of the column in the samples containing the datetimes to use for thinning. This column should
+                 be 'datetimes'.
+            tm_threshold : int | float, optional, default None
+                The temporal threshold to use for temporal and spatiotemporal thinning in the units set with tm_unit.
+            tm_unit : str, optional, default 'day'
+                The temporal units to use for temporal and spatiotemporal thinning. One of the following:
+                    'year': year (all datetimes from the same year will be given the same value)
+                    'month': month (all datetimes from the same month and year will be given the same value)
+                    'day': day (all datetimes with the same date will be given the same value)
+                    'hour': hour (all datetimes in the same hour on the same date will be given the same value)
+                    'moy': month of the year (i.e., January is 1, December is 12 regardless of the year)
+                    'doy': day of the year (i.e., January 1st is 1, December 31st is 365 regardless of the year
+            block : str, optional, default None
+                Optionally, the name of a column that contains unique values to be used to separate the samples into
+                 blocks that will be thinned independently.
+        """
+
+        full = self.samples.copy()
+        full['sample_id'] = ['s' + str(i).zfill(len(str(len(full)))) for i in range(1, len(full) + 1)]  # create IDs
+
+        check_dtype(par='block', obj=block, dtypes=str, none_allowed=True)
+        if isinstance(block, str):
+            check_cols(df=full, cols=block)
+
+        kept = thinst(
+            df=full,
+            coords=coords,
+            sp_threshold=sp_threshold,
+            datetimes=datetimes,
+            tm_threshold=tm_threshold,
+            tm_unit=tm_unit,
+            block=block)
+        kept = kept.sort_values('sample_id').reset_index(drop=True)
+        removed = full.copy().loc[~full['sample_id'].isin(kept['sample_id'])].reset_index(drop=True)
+
+        remove_cols(removed, 'sample_id')
+        remove_cols(kept, 'sample_id')
+
+        self.samples = kept
+        self.removed = removed
+        self.parameters = self.parameters | {'sp_threshold': sp_threshold,
+                                             'tm_threshold': tm_threshold,
+                                             'tm_unit': tm_unit}
+
 
     def reproject(self, crs_target: str | int | pyproj.crs.crs.CRS = 'EPSG:4326'):
 
@@ -2205,4 +2111,3 @@ class Samples:
         output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
         output_parameters.columns = ['parameter', 'value']  # rename columns
         output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
-

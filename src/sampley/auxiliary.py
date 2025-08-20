@@ -44,11 +44,11 @@ def check_opt(par: str, opt: str, opts: list[str]):
 def check_dtype(par: str, obj, dtypes, none_allowed: bool = False):
     """Checks that the datatype of a specified value is valid."""
     check = False
+    dtypes = [dtypes] if not isinstance(dtypes, list) else dtypes
     if obj is None:
         if none_allowed:
             check = True
     else:
-        dtypes = [dtypes] if not isinstance(dtypes, list) else dtypes
         for dtype in dtypes:
             if isinstance(obj, dtype):
                 check = True
