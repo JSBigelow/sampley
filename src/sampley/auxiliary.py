@@ -165,19 +165,19 @@ def check_tz(par: str, tz: str | timezone | pytz.BaseTzInfo, none_allowed: bool 
 # General
 def open_file(filepath: str) -> pd.DataFrame | gpd.GeoDataFrame:
     """Opens a file."""
-    input_ext = os.path.splitext(filepath)[1].lower()
+    ext = os.path.splitext(filepath)[1].lower()
     try:
-        if input_ext == '.csv':
+        if ext == '.csv':
             df = pd.read_csv(filepath)
-        elif input_ext == '.xlsx':
+        elif ext == '.xlsx':
             df = pd.read_excel(filepath)
-        elif input_ext in ['.gpkg', '.shp']:
+        elif ext in ['.gpkg', '.shp']:
             df = gpd.read_file(filepath)
         else:
             raise TypeError('\n\n____________________'
                             '\nTypeError: the file is not of a valid type.'
-                            f'\n  The file extension is {input_ext}'
-                            '\n  The input file must be one of the following:'
+                            f'\n  The file extension is {ext}'
+                            '\n  The imported file must be one of the following:'
                             '\n    .gpkg - GeoPackage (for DataPoints and Sections)'
                             '\n    .shp  - ShapeFile (for DataPoints and Sections)'
                             '\n    .csv  - CSV (for DataPoints only)'

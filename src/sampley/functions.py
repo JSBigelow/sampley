@@ -24,18 +24,18 @@ def datapoints_from_file(
         x_col: str = 'lon',
         y_col: str = 'lat',
         geometry_col: str = None,
-        crs_input: str | int | pyproj.crs.crs.CRS = None,
+        crs_import: str | int | pyproj.crs.crs.CRS = None,
         crs_working: str | int | pyproj.crs.crs.CRS = None,
         datetime_col: str = None,
         datetime_format: str = None,
-        tz_input: str | timezone | pytz.BaseTzInfo | None = None,
+        tz_import: str | timezone | pytz.BaseTzInfo | None = None,
         tz_working: str | timezone | pytz.BaseTzInfo | None = None,
         datapoint_id_col: str = None,
         section_id_col: str = None):
 
     """Make a GeoDataFrame containing datapoints from a GPKG, SHP, CSV, or XLSX file.
 
-    Takes as input a GPKG, SHP, CSV, or XLSX file that contains the datapoints and reformats it for subsequent
+    Takes a GPKG, SHP, CSV, or XLSX file that contains the datapoints and reformats it for subsequent
      processing by: renaming and reordering essential columns; if necessary, reprojecting it to a projected CRS;
      assigning each datapoint a unique ID.
     If loading data from a CSV or XLSX, locations of datapoints must be stored in one of two ways:
@@ -46,16 +46,16 @@ def datapoints_from_file(
         filepath : str
             The path to the file containing the datapoints. Ensure that filepath includes the filename and the extension.
         x_col : str, optional, default 'lon'
-            If inputting a CSV or XLSX with x and y coordinates, the name of the column containing the x coordinate
+            If importing a CSV or XLSX with x and y coordinates, the name of the column containing the x coordinate
              (e.g., longitude) of each datapoint.
         y_col : str, optional, default 'lat'
-            If inputting a CSV or XLSX with x and y coordinates, the name of the column containing the y coordinate
+            If importing a CSV or XLSX with x and y coordinates, the name of the column containing the y coordinate
              (e.g., latitude) of each datapoint.
         geometry_col : str, optional, default None
-            If inputting a CSV or XLSX with points as WKT geometry objects, the name of the column containing the WKT
+            If importing a CSV or XLSX with points as WKT geometry objects, the name of the column containing the WKT
              geometry objects.
-        crs_input : str | int | pyproj.CRS, optional, default None
-            If inputting a CSV or XLSX, the CRS of the coordinates/geometries. The CRS must be either: a pyproj.CRS; a
+        crs_import : str | int | pyproj.CRS, optional, default None
+            If importing a CSV or XLSX, the CRS of the coordinates/geometries. The CRS must be either: a pyproj.CRS; a
              string in a format accepted by pyproj.CRS.from_user_input (e.g., ‘EPSG:4326’); or an integer in a format
              accepted by pyproj.CRS.from_user_input (e.g., 4326).
         crs_working : str | int | pyproj.CRS, optional, default None
@@ -70,14 +70,14 @@ def datapoints_from_file(
             It is possible to use format="ISO8601" if the datetimes meet ISO8601 (units in greatest to least order, 
              e.g., YYYY-MM-DD) or format="mixed" if the datetimes have different formats (although not recommended as 
              slow and risky).
-        tz_input : str | timezone | pytz.BaseTzInfo, optional, default None
+        tz_import : str | timezone | pytz.BaseTzInfo, optional, default None
             If datetime_col is specified, the timezone of the datetimes contained within the column. The timezone must
              be either: a datetime.timezone; a string of a UTC code (e.g., ‘UTC+02:00’, ‘UTC-09:30’); or a string of a
              timezone name accepted by pytz (e.g., ‘Europe/Vilnius’ or ‘Pacific/Marquesas’).
         tz_working : str | timezone | pytz.BaseTzInfo, optional, default None
             The timezone to be used for the subsequent processing. The timezone must be either: a datetime.timezone; a
              string of a UTC code (e.g., ‘UTC+02:00’, ‘UTC-09:30’); or a string of a timezone name accepted by pytz
-             (e.g., ‘Europe/Vilnius’ or ‘Pacific/Marquesas’). Note that tz_input must be specified if tz_working is
+             (e.g., ‘Europe/Vilnius’ or ‘Pacific/Marquesas’). Note that tz_import must be specified if tz_working is
              specified.
         datapoint_id_col : str, optional, default None
             If applicable, the name of the column containing the datapoint IDs. The datapoint IDs must be unique.
@@ -98,17 +98,17 @@ def datapoints_from_file(
     datapoints = open_file(filepath)  # open the datapoints file
 
     # spatial
-    if not isinstance(datapoints, gpd.GeoDataFrame):  # if not already GeoDataFrame (i.e., input file is CSV/XLSX)...
-        check_crs(par='crs_input', crs=crs_input)
+    if not isinstance(datapoints, gpd.GeoDataFrame):  # if not already GeoDataFrame (i.e., import file is CSV/XLSX)...
+        check_crs(par='crs_import', crs=crs_import)
         if geometry_col is None:  # if no geometry column specified
             check_dtype(par='x_col', obj=x_col, dtypes=str, none_allowed=True)
             check_dtype(par='y_col', obj=y_col, dtypes=str, none_allowed=True)
             check_cols(df=datapoints, cols=[x_col, y_col])
-            datapoints = parse_xy(df=datapoints, x_col=x_col, y_col=y_col, crs=crs_input)  # convert to geopandas GeoDataFrame
+            datapoints = parse_xy(df=datapoints, x_col=x_col, y_col=y_col, crs=crs_import)  # convert to geopandas GeoDataFrame
         elif geometry_col is not None:  # else if geometry column is specified
             check_dtype(par='geometry_col', obj=geometry_col, dtypes=str, none_allowed=True)
             check_cols(df=datapoints, cols=geometry_col)
-            datapoints = parse_geoms(df=datapoints, geometry_col=geometry_col, crs=crs_input)  # convert to geopandas GeoDataFrame
+            datapoints = parse_geoms(df=datapoints, geometry_col=geometry_col, crs=crs_import)  # convert to geopandas GeoDataFrame
 
     gtypes = list(set([type(geometry) for geometry in datapoints.geometry]))  # get geometry types
     if len(gtypes) == 1 and gtypes[0] == Point:  # if there is one type: Point
@@ -131,8 +131,8 @@ def datapoints_from_file(
         check_dtype(par='datetime_col', obj=datetime_col, dtypes=str)
         check_cols(df=datapoints, cols=datetime_col)
         check_dtype(par='datetime_format', obj=datetime_format, dtypes=str, none_allowed=True)
-        check_tz(par='tz_input', tz=tz_input, none_allowed=True)
-        parse_dts(df=datapoints, datetime_col=datetime_col, datetime_format=datetime_format, tz=tz_input)  # parse datetimes and set TZ
+        check_tz(par='tz_import', tz=tz_import, none_allowed=True)
+        parse_dts(df=datapoints, datetime_col=datetime_col, datetime_format=datetime_format, tz=tz_import)  # parse datetimes and set TZ
         if tz_working is not None:  # if a working timezone is specified
             check_tz(par='tz_working', tz=tz_working)
             datapoints = convert_tz(df=datapoints, datetime_cols=datetime_col, tz_target=tz_working)  # convert to working TZ
@@ -179,13 +179,13 @@ def sections_from_file(
         crs_working: str | int | pyproj.crs.crs.CRS = None,
         datetime_col: str = None,
         datetime_format: str = None,
-        tz_input: str | timezone | pytz.BaseTzInfo | None = None,
+        tz_import: str | timezone | pytz.BaseTzInfo | None = None,
         tz_working: str | timezone | pytz.BaseTzInfo | None = None,
         section_id_col: str = None):
 
     """Make a GeoDataFrame containing sections from a GPKG or SHP file.
 
-    Takes as input a GPKG or SHP file that contains the sections as shapely.LineStrings and reformats it for subsequent
+    Takes a GPKG or SHP file that contains the sections as shapely.LineStrings and reformats it for subsequent
      processing by: renaming and reordering essential columns; if necessary, reprojecting it to a projected CRS;
      assigning each section a unique ID.
     Sections can be made from CSV or XLSX files containing series of points by first making a DataPoints object and then
@@ -206,14 +206,14 @@ def sections_from_file(
             It is possible to use format="ISO8601" if the datetimes meet ISO8601 (units in greatest to least order,
              e.g., YYYY-MM-DD) or format="mixed" if the datetimes have different formats (although not recommended as
              slow and risky).
-        tz_input : str | timezone | pytz.BaseTzInfo, optional, default None
+        tz_import : str | timezone | pytz.BaseTzInfo, optional, default None
             If datetime_col is specified, the timezone of the datetimes contained within the column. The timezone must
              be either: a datetime.timezone; a string of a UTC code (e.g., ‘UTC+02:00’, ‘UTC-09:30’); or a string of a
              timezone name accepted by pytz (e.g., ‘Europe/Vilnius’ or ‘Pacific/Marquesas’).
         tz_working : str | timezone | pytz.BaseTzInfo, optional, default None
             The timezone to be used for the subsequent processing. The timezone must be either: a datetime.timezone; a
              string of a UTC code (e.g., ‘UTC+02:00’, ‘UTC-09:30’); or a string of a timezone name accepted by pytz
-             (e.g., ‘Europe/Vilnius’ or ‘Pacific/Marquesas’). Note that tz_input must be specified if tz_working is
+             (e.g., ‘Europe/Vilnius’ or ‘Pacific/Marquesas’). Note that tz_import must be specified if tz_working is
              specified.
         section_id_col : str, optional, default None
             Optionally, the name of the column containing the section IDs. Each individual section must have its own
@@ -239,7 +239,7 @@ def sections_from_file(
     else:  # else if there are other types, print error message...
         raise TypeError('geometries are not LineStrings or MultiLineStrings.'
                         f'\nGeometry types include {", ".join(gtypes)}.'
-                        '\nTo make sections from Points, first input the Points as DataPoints and then'
+                        '\nTo make sections from Points, first import the Points as DataPoints and then'
                         ' use Sections.from_datapoints() to make Sections from the DataPoints.')
 
     if crs_working is not None:  # if a working CRS is provided
@@ -253,8 +253,8 @@ def sections_from_file(
         check_dtype(par='datetime_col', obj=datetime_col, dtypes=str)
         check_cols(df=sections, cols=datetime_col)
         check_dtype(par='datetime_format', obj=datetime_format, dtypes=str, none_allowed=True)
-        check_tz(par='tz_input', tz=tz_input, none_allowed=True)
-        parse_dts(df=sections, datetime_col=datetime_col, datetime_format=datetime_format, tz=tz_input)  # parse datetimes and set TZ
+        check_tz(par='tz_import', tz=tz_import, none_allowed=True)
+        parse_dts(df=sections, datetime_col=datetime_col, datetime_format=datetime_format, tz=tz_import)  # parse datetimes and set TZ
         if tz_working is not None:  # if a working timezone is specified
             check_tz(par='tz_working', tz=tz_working)
             sections = convert_tz(df=sections, datetime_cols=datetime_col, tz_target=tz_working)  # convert to working TZ
@@ -295,7 +295,7 @@ def sections_from_datapoints(
 
     """Make a GeoDataFrame containing sections from a GeoDataFrame containing datapoints.
 
-    Takes as input a GeoDataFrame that contains sections as continuous series of Points and reformats it for
+    Takes a GeoDataFrame that contains sections as continuous series of Points and reformats it for
      subsequent processing by: converting each series of Points to a LineString; renaming and reordering essential
      columns. The CRS and timezone will be that of the datapoints GeoDataFrame.
     Note: should only be used with continuous datapoints and not with sporadic datapoints.
@@ -373,7 +373,7 @@ def periods_delimit(
     From a given extent, number of units, and type of units, delimit temporal periods of regular length, e.g.,
      8 days, 2 months, or 1 year.
     Temporal periods of irregular length (e.g., seasons) should be predefined and contained within a column of the
-     input data.
+     dataframe.
 
     Parameters:
         extent : pandas.DataFrame | tuple[list, str]
@@ -1015,7 +1015,7 @@ def absences_delimit(
                  effort (measured as length of the sections) per block
                 'presences': the number of absences per block will be equal to the corresponding number of presences
                  multiplied by the target (e.g., if a block has 19 presences and target=2, then 38 absences will be
-                 generated for that block); note that presences must also be input if using this option
+                 generated for that block); note that presences must also be entered if using this option
         presences : GeoDataFrame, optional, default None
             If using block and how='presences', the presences GeoDataFrame on which to base the number of absences. Note
              that the presences must contain the same block column as the sections.
@@ -1137,7 +1137,7 @@ def assign_periods(gdf: gpd.GeoDataFrame, periods: pd.DataFrame | str | None) ->
         check_cols(df=gdf, cols=periods)
         if periods != 'period_id':  # if periods column not called 'period_id'...
             gdf['period_id'] = gdf[periods]  # ...duplicate it
-    elif not periods:  # if there are no periods
+    elif periods is None:  # if there are no periods
         gdf['period_id'] = 'none'
     else:  # period is not of a recognised datatype
         raise TypeError('\nunable to assign periods. Periods of invalid datatype.')
@@ -1288,8 +1288,9 @@ def assign_segments(gdf: gpd.GeoDataFrame, segments: gpd.GeoDataFrame, how: str)
     return gdf
 
 
-def samples_grid(cells: gpd.GeoDataFrame, periods: pd.DataFrame | str | None, datapoints: gpd.GeoDataFrame,
-                 cols: dict, full: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
+def samples_grid(datapoints: gpd.GeoDataFrame, cols: dict,
+                 cells: gpd.GeoDataFrame, periods: pd.DataFrame | str | None = None,
+                 full: bool = False) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     """Resample datapoints using the grid approach.
 
@@ -1301,13 +1302,6 @@ def samples_grid(cells: gpd.GeoDataFrame, periods: pd.DataFrame | str | None, da
     Parameters:
         datapoints : GeoDataFrame
             The GeoDataFrame containing the datapoints.
-        cells : Cells
-            The GeoDataFrame containing the cells.
-        periods : Periods | str | None
-            One of the following:
-                a DataFrame containing the periods
-                a string indicating the name of the column in datapoints containing pre-set periods
-                None
         cols : dict
             A dictionary indicating how to treat each of the data columns. The dictionary should have the format:
                 {'COLUMN': FUNCTION,
@@ -1328,6 +1322,13 @@ def samples_grid(cells: gpd.GeoDataFrame, periods: pd.DataFrame | str | None, da
             Note that some functions have quotation marks, while others do not. Note that some functions differ in
              how they treat NA values (missing values) and 0s. It is not necessary to specify all columns, but any
              columns not specified will not be retained. Each column can only be specified once.
+        cells : Cells
+            The GeoDataFrame containing the cells.
+        periods : Periods | str | None, optional, default None
+            One of the following:
+                a DataFrame containing the periods
+                a string indicating the name of the column in datapoints containing pre-set periods
+                None
         full : bool, optional, default False
             If False, only those cell-period combinations that have at least one datapoint will be included in
              samples. If True, all possible cell-period combinations will be included in samples (note that this
@@ -1362,11 +1363,19 @@ def samples_grid(cells: gpd.GeoDataFrame, periods: pd.DataFrame | str | None, da
 
     check_dtype(par='full', obj=full, dtypes=bool)
     if full:  # if full true, get all cell-period combos and merge them
-        ids = [(cell, period) for cell in cells['cell_id'] for period in periods['period_id']]  # get all combos of IDs
-        ids = pd.DataFrame({'cell_id': [i[0] for i in ids], 'period_id': [i[1] for i in ids]})  # make DataFrame
+        if isinstance(periods, pd.DataFrame):
+            ids = [(cell, period) for cell in cells['cell_id'] for period in periods['period_id']]  # get all combos of IDs
+            ids = pd.DataFrame({'cell_id': [i[0] for i in ids], 'period_id': [i[1] for i in ids]})  # make DataFrame
+        elif isinstance(periods, str):
+            ids = [(cell, period) for cell in cells['cell_id'] for period in datapoints[periods].unique()]  # get all combos of IDs
+            ids = pd.DataFrame({'cell_id': [i[0] for i in ids], 'period_id': [i[1] for i in ids]})  # make DataFrame
+        else:
+            ids = pd.DataFrame({'cell_id': [cell for cell in cells['cell_id']]})  # get all combos of IDs
+            ids['period_id'] = 'none'
         samples = pd.merge(ids, samples, on=['cell_id', 'period_id'], how='left')  # merge to samples
 
-    samples = pd.merge(left=periods, right=samples, on='period_id', how='right')  # add IDs and limits
+    if isinstance(periods, pd.DataFrame):
+        samples = pd.merge(left=periods, right=samples, on='period_id', how='right')  # add IDs and limits
     samples = pd.merge(left=cells, right=samples, on='cell_id', how='right')  # add IDs and limits
     return assigned, samples
 
@@ -1566,7 +1575,7 @@ def samples_point(presences: gpd.GeoDataFrame, absences: gpd.GeoDataFrame,
     return samples
 
 
-def samples_grid_se(sections: gpd.GeoDataFrame, cells: gpd.GeoDataFrame, periods: pd.DataFrame | str | None,
+def samples_grid_se(sections: gpd.GeoDataFrame, cells: gpd.GeoDataFrame, periods: pd.DataFrame | str | None = None,
                     length: bool = True, esw: int | float = None, euc_geo: str = 'euclidean', full: bool = False)\
         -> tuple[pd.DataFrame, pd.DataFrame]:
 
@@ -1586,7 +1595,7 @@ def samples_grid_se(sections: gpd.GeoDataFrame, cells: gpd.GeoDataFrame, periods
             The GeoDataFrame containing the sections.
         cells : GeoDataFrame
             The GeoDataFrame containing the cells.
-        periods : DataFrame | str | None
+        periods : DataFrame | str | None, optional, default None
             One of the following:
                 a DataFrame containing the periods
                 a string indicating the name of the column in datapoints containing pre-set periods
@@ -1680,12 +1689,21 @@ def samples_grid_se(sections: gpd.GeoDataFrame, cells: gpd.GeoDataFrame, periods
 
     check_dtype(par='full', obj=full, dtypes=bool)
     if full:  # if full true, get all cell-period combos and merge them
-        ids = [(cell, period) for cell in cells['cell_id'] for period in periods['period_id']]  # get all combos of IDs
-        ids = pd.DataFrame({'cell_id': [i[0] for i in ids], 'period_id': [i[1] for i in ids]})  # make DataFrame
-        samples = pd.merge(left=ids, right=samples, on=['cell_id', 'period_id'], how='left')  # merge to samples
+        if isinstance(periods, pd.DataFrame):
+            ids = [(cell, period) for cell in cells['cell_id'] for period in periods['period_id']]  # get all combos of IDs
+            ids = pd.DataFrame({'cell_id': [i[0] for i in ids], 'period_id': [i[1] for i in ids]})  # make DataFrame
+        elif isinstance(periods, str):
+            ids = [(cell, period) for cell in cells['cell_id'] for period in sections[periods].unique()]  # get all combos of IDs
+            ids = pd.DataFrame({'cell_id': [i[0] for i in ids], 'period_id': [i[1] for i in ids]})  # make DataFrame
+        else:
+            ids = pd.DataFrame({'cell_id': [cell for cell in cells['cell_id']]})  # get all combos of IDs
+            ids['period_id'] = 'none'
+        samples = pd.merge(ids, samples, on=['cell_id', 'period_id'], how='left')  # merge to samples
 
-    samples = pd.merge(left=periods, right=samples, on='period_id', how='right')  # add IDs and limits
+    if isinstance(periods, pd.DataFrame):
+        samples = pd.merge(left=periods, right=samples, on='period_id', how='right')  # add IDs and limits
     samples = pd.merge(left=cells, right=samples, on='cell_id', how='right')  # add IDs and limits
+
     return assigned, samples
 
 
@@ -1865,7 +1883,8 @@ def cells_colours(cells):
 
 def cells_plot(ax, cells):
     colours = cells_colours(cells)
-    cells.plot(ax=ax, edgecolor='#dedede', facecolor=colours['colours'], alpha=0.2, zorder=2)
+    cells.plot(ax=ax, edgecolor='none', facecolor=colours['colours'], alpha=0.2, zorder=2)
+    cells.plot(ax=ax, edgecolor=colours['colours'], facecolor='none', alpha=0.8, zorder=3)
 
 
 def segments_colours(segments):
@@ -1901,7 +1920,7 @@ def absences_removed_plot(ax, points, buffer=None):
 
 
 def presencezones_plot(ax, zones):
-    zones.dissolve().plot(ax=ax, color='#0055a3', alpha=0.1, zorder=4)
+    zones.dissolve().plot(ax=ax, color='#0055a3', alpha=0.5, zorder=4)
 
 
 def assigned_plot_cells_datapoints(ax, assigned, cells):
@@ -1972,8 +1991,8 @@ def generate_dfls(number: int | float, esw: int | float, interval: int | float, 
          0.1, 0.2, 0.3, etc...
       dfunc: typing.Callable, optional, default None
         Optionally, a callable function (e.g., a detection function), in which case, distances will be generated based on
-         probabilities derived from the function. Function should be predefined then input to generate_dfls. If not
-         specified, distances will be evenly distributed between 0 and the ESW.
+         probabilities derived from the function. The function should be predefined then entered to generate_dfls. If
+         not specified, distances will be evenly distributed between 0 and the ESW.
 
     __________
     Example:
@@ -2013,8 +2032,8 @@ def calculate_area_udf(esw: int | float, interval: int | float, dfunc: typing.Ca
          0.1, 0.2, 0.3, etc...
       dfunc: typing.Callable, optional, default None
         Optionally, a callable function (e.g., a detection function), in which case, distances will be generated based on
-         probabilities derived from the function. Function should be predefined then input to generate_dfls. If not
-         specified, distances will be evenly distributed between 0 and the ESW.
+         probabilities derived from the function. The function should be predefined then entered to generate_dfls. If
+         not specified, distances will be evenly distributed between 0 and the ESW.
 
     __________
     Example:

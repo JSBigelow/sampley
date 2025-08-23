@@ -23,20 +23,20 @@ class DataPoints:
             x_col: str = 'lon',
             y_col: str = 'lat',
             geometry_col: str = None,
-            crs_input: str | int | pyproj.crs.crs.CRS = None,
+            crs_import: str | int | pyproj.crs.crs.CRS = None,
             crs_working: str | int | pyproj.crs.crs.CRS = None,
             datetime_col: str | None = None,
             datetime_format: str = None,
-            tz_input: str | timezone | pytz.BaseTzInfo | None = None,
+            tz_import: str | timezone | pytz.BaseTzInfo | None = None,
             tz_working: str | timezone | pytz.BaseTzInfo | None = None,
             datapoint_id_col: str = None,
             section_id_col: str = None):
 
         """Make a DataPoints object from a GPKG, SHP, CSV, or XLSX file.
 
-        Takes as input a GPKG, SHP, CSV, or XLSX file that contains the datapoints and reformats it for subsequent
-         processing by: renaming and reordering essential columns; if necessary, reprojecting it to a projected CRS;
-         assigning each datapoint a unique ID.
+        Takes a GPKG, SHP, CSV, or XLSX file that contains the datapoints and reformats it for subsequent processing by:
+         renaming and reordering essential columns; if necessary, reprojecting it to a projected CRS; assigning each
+         datapoint a unique ID.
         If loading data from a CSV or XLSX, locations of datapoints must be stored in one of two ways:
           two columns (x_col and y_col) containing x and y (e.g., longitude and latitude) coordinates
           one column (geometry_col) containing points as WKT geometry objects
@@ -44,16 +44,16 @@ class DataPoints:
             filepath : str
                 The path to the file containing the datapoints. Ensure that filepath includes the filename and the extension.
             x_col : str, optional, default 'lon'
-                If inputting a CSV or XLSX with x and y coordinates, the name of the column containing the x coordinate
+                If importing a CSV or XLSX with x and y coordinates, the name of the column containing the x coordinate
                  (e.g., longitude) of each datapoint.
             y_col : str, optional, default 'lat'
-                If inputting a CSV or XLSX with x and y coordinates, the name of the column containing the y coordinate
+                If importing a CSV or XLSX with x and y coordinates, the name of the column containing the y coordinate
                  (e.g., latitude) of each datapoint.
             geometry_col : str, optional, default None
-                If inputting a CSV or XLSX with points as WKT geometry objects, the name of the column containing the WKT
+                If importing a CSV or XLSX with points as WKT geometry objects, the name of the column containing the WKT
                  geometry objects.
-            crs_input : str | int | pyproj.CRS, optional, default None
-                If inputting a CSV or XLSX, the CRS of the coordinates/geometries. The CRS must be either: a pyproj.CRS; a
+            crs_import : str | int | pyproj.CRS, optional, default None
+                If importing a CSV or XLSX, the CRS of the coordinates/geometries. The CRS must be either: a pyproj.CRS; a
                  string in a format accepted by pyproj.CRS.from_user_input (e.g., ‘EPSG:4326’); or an integer in a format
                  accepted by pyproj.CRS.from_user_input (e.g., 4326).
             crs_working : str | int | pyproj.CRS, optional, default None
@@ -68,14 +68,14 @@ class DataPoints:
                 It is possible to use format="ISO8601" if the datetimes meet ISO8601 (units in greatest to least order,
                  e.g., YYYY-MM-DD) or format="mixed" if the datetimes have different formats (although not recommended as
                  slow and risky).
-            tz_input : str | timezone | pytz.BaseTzInfo, optional, default None
+            tz_import : str | timezone | pytz.BaseTzInfo, optional, default None
                 If datetime_col is specified, the timezone of the datetimes contained within the column. The timezone must
                  be either: a datetime.timezone; a string of a UTC code (e.g., ‘UTC+02:00’, ‘UTC-09:30’); or a string of a
                  timezone name accepted by pytz (e.g., ‘Europe/Vilnius’ or ‘Pacific/Marquesas’).
             tz_working : str | timezone | pytz.BaseTzInfo, optional, default None
                 The timezone to be used for the subsequent processing. The timezone must be either: a datetime.timezone; a
                  string of a UTC code (e.g., ‘UTC+02:00’, ‘UTC-09:30’); or a string of a timezone name accepted by pytz
-                 (e.g., ‘Europe/Vilnius’ or ‘Pacific/Marquesas’). Note that tz_input must be specified if tz_working is
+                 (e.g., ‘Europe/Vilnius’ or ‘Pacific/Marquesas’). Note that tz_import must be specified if tz_working is
                  specified.
             datapoint_id_col : str, optional, default None
                 If applicable, the name of the column containing the datapoint IDs. The datapoint IDs must be unique.
@@ -95,11 +95,11 @@ class DataPoints:
             x_col=x_col,
             y_col=y_col,
             geometry_col=geometry_col,
-            crs_input=crs_input,
+            crs_import=crs_import,
             crs_working=crs_working,
             datetime_col=datetime_col,
             datetime_format=datetime_format,
-            tz_input=tz_input,
+            tz_import=tz_import,
             tz_working=tz_working,
             datapoint_id_col=datapoint_id_col,
             section_id_col=section_id_col)
@@ -147,30 +147,30 @@ class DataPoints:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        input_datapoints = open_file(folder + basename + '.gpkg')
-        input_datapoints = input_datapoints[['datapoint_id', 'geometry', 'datetime'] +
-                                            [c for c in input_datapoints if c not in
+        datapoints = open_file(folder + basename + '.gpkg')
+        datapoints = datapoints[['datapoint_id', 'geometry', 'datetime'] +
+                                            [c for c in datapoints if c not in
                                              ['datapoint_id', 'geometry', 'datetime']]]
         try:
-            input_parameters = open_file(folder + basename + '-parameters.csv')
-            input_parameters = input_parameters.set_index('parameter').T.to_dict('records')[0]
+            parameters = open_file(folder + basename + '-parameters.csv')
+            parameters = parameters.set_index('parameter').T.to_dict('records')[0]
         except FileNotFoundError:
             print('Warning: parameters not found. An empty parameters attribute will be made.')
-            input_parameters = {}
+            parameters = {}
 
         if crs_working is not None:  # if CRS provided
             check_crs(par='crs_working', crs=crs_working)
-            input_datapoints = reproject_crs(gdf=input_datapoints, crs_target=crs_working)  # reproject
-            input_parameters['datapoints_crs'] = str(crs_working)  # update parameter
+            datapoints = reproject_crs(gdf=datapoints, crs_target=crs_working)  # reproject
+            parameters['datapoints_crs'] = str(crs_working)  # update parameter
 
-        if isinstance(input_datapoints['datetime'].iloc[0], str):
-            parse_dts(input_datapoints, 'datetime')
+        if isinstance(datapoints['datetime'].iloc[0], str):
+            parse_dts(datapoints, 'datetime')
             if tz_working is not None:  # if TZ provided
                 check_tz(par='tz_working', tz=tz_working)
-                input_datapoints = convert_tz(df=input_datapoints, datetime_cols='datetime', tz_target=tz_working)  # convert
-                input_parameters['datapoints_tz'] = str(tz_working)  # update parameter
+                datapoints = convert_tz(df=datapoints, datetime_cols='datetime', tz_target=tz_working)  # convert
+                parameters['datapoints_tz'] = str(tz_working)  # update parameter
 
-        return cls(datapoints=input_datapoints, name=basename, parameters=input_parameters)
+        return cls(datapoints=datapoints, name=basename, parameters=parameters)
 
     def plot(self, sections=None):
 
@@ -188,21 +188,21 @@ class DataPoints:
         sections_plot(ax, sections.sections) if isinstance(sections, Sections) else None
 
     def save(self, folder,
-             crs_output: str | int | pyproj.crs.crs.CRS = None,
-             tz_output: str | timezone | pytz.BaseTzInfo = None):
+             crs_export: str | int | pyproj.crs.crs.CRS = None,
+             tz_export: str | timezone | pytz.BaseTzInfo = None):
 
         """Save the datapoints.
 
         Saves the datapoints GeoDataFrame as a GPKG. The name of the saved file will be the name of the DataPoints
-         object. Additionally, the parameters will be output as a CSV with the same name plus '-parameters'.
+         object. Additionally, the parameters will be exported as a CSV with the same name plus '-parameters'.
 
         Parameters:
             folder : str
-                The path to the output folder where the output files will be saved
-            crs_output : str | int | pyproj.CRS, optional, default None
+                The path to the export folder where the exported files will be saved
+            crs_export : str | int | pyproj.CRS, optional, default None
                 The CRS to reproject the datapoints to before saving (only reprojects the datapoints that are saved and
                  not the DataPoints object).
-            tz_output : str | timezone | pytz.BaseTzInfo, optional, default None
+            tz_export : str | timezone | pytz.BaseTzInfo, optional, default None
                 The timezone to convert the datapoints to before saving (only converts the datapoints that are saved and
                  not the DataPoints object).
         """
@@ -210,24 +210,24 @@ class DataPoints:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        output_datapoints = self.datapoints.copy()  # copy datapoints GeoDataFrame
-        output_parameters = self.parameters.copy()  # copy parameters
+        datapoints = self.datapoints.copy()  # copy datapoints GeoDataFrame
+        parameters = self.parameters.copy()  # copy parameters
 
-        if crs_output is not None:  # if CRS provided
-            check_crs(par='crs_output', crs=crs_output)
-            output_datapoints = reproject_crs(gdf=output_datapoints, crs_target=crs_output)  # reproject
-            output_parameters['datapoints_crs'] = str(crs_output)  # update parameter
-        if tz_output is not None:  # if TZ provided
-            check_tz(par='tz_output', tz=tz_output)
-            output_datapoints = convert_tz(df=output_datapoints, datetime_cols='datetime', tz_target=tz_output)  # convert
-            output_parameters['datapoints_tz'] = str(tz_output)  # update parameter
-        output_datapoints['datetime'] = output_datapoints['datetime'].apply(  # convert datetime to string if datetime
+        if crs_export is not None:  # if CRS provided
+            check_crs(par='crs_export', crs=crs_export)
+            datapoints = reproject_crs(gdf=datapoints, crs_target=crs_export)  # reproject
+            parameters['datapoints_crs'] = str(crs_export)  # update parameter
+        if tz_export is not None:  # if TZ provided
+            check_tz(par='tz_export', tz=tz_export)
+            datapoints = convert_tz(df=datapoints, datetime_cols='datetime', tz_target=tz_export)  # convert
+            parameters['datapoints_tz'] = str(tz_export)  # update parameter
+        datapoints['datetime'] = datapoints['datetime'].apply(  # convert datetime to string if datetime
             lambda dt: str(dt) if isinstance(dt, (datetime | pd.Timestamp)) else dt)
-        output_datapoints.to_file(folder + '/' + self.name + '.gpkg')  # output datapoints as GPKG
+        datapoints.to_file(folder + '/' + self.name + '.gpkg')  # exported datapoints as GPKG
 
-        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
-        output_parameters.columns = ['parameter', 'value']  # rename columns
-        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
+        parameters = pd.DataFrame({key: [value] for key, value in parameters.items()}).T.reset_index()  # parameters dataframe
+        parameters.columns = ['parameter', 'value']  # rename columns
+        parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # export parameters
 
 
 class Sections:
@@ -243,13 +243,13 @@ class Sections:
             crs_working: str | int | pyproj.crs.crs.CRS = None,
             datetime_col: str | None = None,
             datetime_format: str = None,
-            tz_input: str | timezone | pytz.BaseTzInfo | None = None,
+            tz_import: str | timezone | pytz.BaseTzInfo | None = None,
             tz_working: str | timezone | pytz.BaseTzInfo | None = None,
             section_id_col: str | None = None):
 
         """Make a Sections object from a GPKG or SHP file.
 
-        Takes as input a GPKG or SHP file that contains the sections as shapely.LineStrings and reformats it for subsequent
+        Takes a GPKG or SHP file that contains the sections as shapely.LineStrings and reformats it for subsequent
          processing by: renaming and reordering essential columns; if necessary, reprojecting it to a projected CRS;
          assigning each section a unique ID.
         Sections can be made from CSV or XLSX files containing series of points by first making a DataPoints object and then
@@ -270,14 +270,14 @@ class Sections:
                 It is possible to use format="ISO8601" if the datetimes meet ISO8601 (units in greatest to least order,
                  e.g., YYYY-MM-DD) or format="mixed" if the datetimes have different formats (although not recommended as
                  slow and risky).
-            tz_input : str | timezone | pytz.BaseTzInfo, optional, default None
+            tz_import : str | timezone | pytz.BaseTzInfo, optional, default None
                 If datetime_col is specified, the timezone of the datetimes contained within the column. The timezone must
                  be either: a datetime.timezone; a string of a UTC code (e.g., ‘UTC+02:00’, ‘UTC-09:30’); or a string of a
                  timezone name accepted by pytz (e.g., ‘Europe/Vilnius’ or ‘Pacific/Marquesas’).
             tz_working : str | timezone | pytz.BaseTzInfo, optional, default None
                 The timezone to be used for the subsequent processing. The timezone must be either: a datetime.timezone; a
                  string of a UTC code (e.g., ‘UTC+02:00’, ‘UTC-09:30’); or a string of a timezone name accepted by pytz
-                 (e.g., ‘Europe/Vilnius’ or ‘Pacific/Marquesas’). Note that tz_input must be specified if tz_working is
+                 (e.g., ‘Europe/Vilnius’ or ‘Pacific/Marquesas’). Note that tz_import must be specified if tz_working is
                  specified.
             section_id_col : str, optional, default None
                 Optionally, the name of the column containing the section IDs. Each individual section must have its own
@@ -293,7 +293,7 @@ class Sections:
             crs_working=crs_working,
             datetime_col=datetime_col,
             datetime_format=datetime_format,
-            tz_input=tz_input,
+            tz_import=tz_import,
             tz_working=tz_working,
             section_id_col=section_id_col)
 
@@ -319,9 +319,9 @@ class Sections:
 
         """Make a Sections object from a DataPoints object.
 
-        Takes as input a DataPoints object that contains sections as continuous series of Points and reformats it for
-         subsequent processing by: converting each series of Points to a LineString; renaming and reordering essential 
-         columns. The CRS and timezone will be that of the DataPoints object.
+        Takes a DataPoints object that contains sections as continuous series of Points and reformats it for subsequent
+         processing by: converting each series of Points to a LineString; renaming and reordering essential columns. The
+         CRS and timezone will be that of the DataPoints object.
         Note that, when making the DataPoints object, it is necessary to specify section_id_col. Please see the
          documentation for Sections or for the section_id_col parameter under DataPoints.from_file for more information on 
          section IDs and how they should be formatted.
@@ -397,29 +397,29 @@ class Sections:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        input_sections = open_file(folder + basename + '.gpkg')
-        input_sections = input_sections[['section_id', 'geometry', 'datetime'] +
-                                        [c for c in input_sections if c not in ['section_id', 'geometry', 'datetime']]]
+        sections = open_file(folder + basename + '.gpkg')
+        sections = sections[['section_id', 'geometry', 'datetime'] +
+                                        [c for c in sections if c not in ['section_id', 'geometry', 'datetime']]]
         try:
-            input_parameters = open_file(folder + basename + '-parameters.csv')
-            input_parameters = input_parameters.set_index('parameter').T.to_dict('records')[0]
+            parameters = open_file(folder + basename + '-parameters.csv')
+            parameters = parameters.set_index('parameter').T.to_dict('records')[0]
         except FileNotFoundError:
             print('Warning: parameters not found. An empty parameters attribute will be made.')
-            input_parameters = {}
+            parameters = {}
 
         if crs_working is not None:  # if CRS provided
             check_crs(par='crs_working', crs=crs_working)
-            input_sections = reproject_crs(gdf=input_sections, crs_target=crs_working)  # reproject
-            input_parameters['sections_crs'] = str(crs_working)  # update parameter
+            sections = reproject_crs(gdf=sections, crs_target=crs_working)  # reproject
+            parameters['sections_crs'] = str(crs_working)  # update parameter
 
-        if isinstance(input_sections['datetime'].iloc[0], str):
-            parse_dts(input_sections, 'datetime')
+        if isinstance(sections['datetime'].iloc[0], str):
+            parse_dts(sections, 'datetime')
             if tz_working is not None:  # if TZ provided
                 check_tz(par='tz_working', tz=tz_working)
-                input_sections = convert_tz(df=input_sections, datetime_cols='datetime', tz_target=tz_working)  # convert
-                input_parameters['sections_tz'] = str(tz_working)  # update parameter
+                sections = convert_tz(df=sections, datetime_cols='datetime', tz_target=tz_working)  # convert
+                parameters['sections_tz'] = str(tz_working)  # update parameter
 
-        return cls(sections=input_sections, name=basename, parameters=input_parameters)
+        return cls(sections=sections, name=basename, parameters=parameters)
 
     def plot(self, datapoints=None):
 
@@ -437,21 +437,21 @@ class Sections:
         datapoints_plot(ax, datapoints.datapoints) if isinstance(datapoints, DataPoints) else None
 
     def save(self, folder,
-             crs_output: str | int | pyproj.crs.crs.CRS = None,
-             tz_output: str | timezone | pytz.BaseTzInfo = None):
+             crs_export: str | int | pyproj.crs.crs.CRS = None,
+             tz_export: str | timezone | pytz.BaseTzInfo = None):
 
         """Save the sections.
 
         Saves the sections GeoDataFrame as a GPKG. The name of the saved file will be the name of the Sections object.
-         Additionally, the parameters will be output as a CSV with the same name plus '-parameters'.
+         Additionally, the parameters will be exported as a CSV with the same name plus '-parameters'.
 
         Parameters:
             folder : str
-                The path to the output folder where the output files will be saved
-            crs_output : str | int | pyproj.CRS, optional, default None
+                The path to the export folder where the exported files will be saved
+            crs_export : str | int | pyproj.CRS, optional, default None
                 The CRS to reproject the sections to before saving (only reprojects the sections that are saved and not
                  the Sections object).
-            tz_output : str | timezone | pytz.BaseTzInfo, optional, default None
+            tz_export : str | timezone | pytz.BaseTzInfo, optional, default None
                 The timezone to convert the sections to before saving (only converts the sections that are saved and not
                  the Sections object).
         """
@@ -459,24 +459,24 @@ class Sections:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        output_sections = self.sections.copy()  # copy sections GeoDataFrame
-        output_parameters = self.parameters.copy()  # copy parameters
+        sections = self.sections.copy()  # copy sections GeoDataFrame
+        parameters = self.parameters.copy()  # copy parameters
 
-        if crs_output is not None:  # if CRS provided
-            check_crs(par='crs_output', crs=crs_output)
-            output_sections = reproject_crs(gdf=output_sections, crs_target=crs_output)  # reproject
-            output_parameters['sections_crs'] = str(crs_output)  # update parameter
-        if tz_output is not None:  # if TZ provided
-            check_tz(par='tz_output', tz=tz_output)
-            output_sections = convert_tz(df=output_sections, datetime_cols='datetime', tz_target=tz_output)  # convert
-            output_parameters['sections_tz'] = str(tz_output)  # update parameter
-        output_sections['datetime'] = output_sections['datetime'].apply(  # convert datetime to string if datetime
+        if crs_export is not None:  # if CRS provided
+            check_crs(par='crs_export', crs=crs_export)
+            sections = reproject_crs(gdf=sections, crs_target=crs_export)  # reproject
+            parameters['sections_crs'] = str(crs_export)  # update parameter
+        if tz_export is not None:  # if TZ provided
+            check_tz(par='tz_export', tz=tz_export)
+            sections = convert_tz(df=sections, datetime_cols='datetime', tz_target=tz_export)  # convert
+            parameters['sections_tz'] = str(tz_export)  # update parameter
+        sections['datetime'] = sections['datetime'].apply(  # convert datetime to string if datetime
             lambda dt: str(dt) if isinstance(dt, (datetime | pd.Timestamp)) else dt)
-        output_sections.to_file(folder + '/' + self.name + '.gpkg')  # output sections as GPKG
+        sections.to_file(folder + '/' + self.name + '.gpkg')  # export sections as GPKG
 
-        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
-        output_parameters.columns = ['parameter', 'value']  # rename columns
-        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
+        parameters = pd.DataFrame({key: [value] for key, value in parameters.items()}).T.reset_index()  # parameters dataframe
+        parameters.columns = ['parameter', 'value']  # rename columns
+        parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # export parameters
 
 
 ##############################################################################################################
@@ -499,7 +499,7 @@ class Periods:
         From a given extent, number of units, and type of units, delimit temporal periods of regular length, e.g.,
          8 days, 2 months, or 1 year.
         Temporal periods of irregular length (e.g., seasons) should be predefined and contained within a column of the
-         input data.
+         imported data.
 
         Parameters:
             extent : Sections | DataPoints | pandas.DataFrame | tuple[list, str]
@@ -574,46 +574,46 @@ class Periods:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        input_periods = open_file(folder + basename + '.csv')
-        input_periods['date_beg'] = pd.to_datetime(input_periods['date_beg'])
-        input_periods['date_mid'] = pd.to_datetime(input_periods['date_mid'])
-        input_periods['date_end'] = pd.to_datetime(input_periods['date_end'])
+        import_periods = open_file(folder + basename + '.csv')
+        import_periods['date_beg'] = pd.to_datetime(import_periods['date_beg'])
+        import_periods['date_mid'] = pd.to_datetime(import_periods['date_mid'])
+        import_periods['date_end'] = pd.to_datetime(import_periods['date_end'])
 
         try:
-            input_parameters = open_file(folder + basename + '-parameters.csv')
-            input_parameters = input_parameters.set_index('parameter').T.to_dict('records')[0]
+            import_parameters = open_file(folder + basename + '-parameters.csv')
+            import_parameters = import_parameters.set_index('parameter').T.to_dict('records')[0]
         except FileNotFoundError:
             print('Warning: parameters not found. An empty parameters attribute will be made.')
-            input_parameters = {}
+            import_parameters = {}
 
-        return cls(periods=input_periods, name=basename, parameters=input_parameters)
+        return cls(periods=import_periods, name=basename, parameters=import_parameters)
 
     def save(self, folder: str):
 
         """Save the periods.
 
         Saves the periods DataFrame as a CSV. The name of the saved file will be the name of the Periods object.
-         Additionally, the parameters will be output as a CSV with the same name plus '-parameters'.
+         Additionally, the parameters will be exported as a CSV with the same name plus '-parameters'.
 
         Parameters:
             folder : str
-                The path to the output folder where the output files will be saved
+                The path to the export folder where the exported files will be saved
         """
 
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        output_periods = self.periods.copy()  # copy dataframe
-        output_parameters = self.parameters.copy()  # copy parameters
+        periods = self.periods.copy()  # copy dataframe
+        parameters = self.parameters.copy()  # copy parameters
 
         for col in ['date_beg', 'date_mid', 'date_end']:  # for each potential datetime col...
-            output_periods[col] = output_periods[col].apply(  # convert datetime to string if there is datetime
+            periods[col] = periods[col].apply(  # convert datetime to string if there is datetime
                 lambda dt: str(dt) if isinstance(dt, (datetime | pd.Timestamp)) else dt)
-        output_periods.to_csv(folder + '/' + self.name + '.csv', index=False)  # output to CSV
+        periods.to_csv(folder + '/' + self.name + '.csv', index=False)  # export to CSV
 
-        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
-        output_parameters.columns = ['parameter', 'value']  # rename columns
-        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
+        parameters = pd.DataFrame({key: [value] for key, value in parameters.items()}).T.reset_index()  # parameters dataframe
+        parameters.columns = ['parameter', 'value']  # rename columns
+        parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # export parameters
 
 
 class Cells:
@@ -710,25 +710,25 @@ class Cells:
         try:
             centroids = open_file(folder + basename + '-centroids.gpkg')
             centroids.rename_geometry('centroid', inplace=True)
-            input_cells = pd.merge(polygons, centroids, on='cell_id')
+            import_cells = pd.merge(polygons, centroids, on='cell_id')
         except FileNotFoundError:
             print('Warning: centroids not found. Cells object will be made without centroids.')
-            input_cells = polygons
-            input_cells['centroid'] = None
+            import_cells = polygons
+            import_cells['centroid'] = None
 
         try:
-            input_parameters = open_file(folder + basename + '-parameters.csv')
-            input_parameters = input_parameters.set_index('parameter').T.to_dict('records')[0]
+            import_parameters = open_file(folder + basename + '-parameters.csv')
+            import_parameters = import_parameters.set_index('parameter').T.to_dict('records')[0]
         except FileNotFoundError:
             print('Warning: parameters not found. An empty parameters attribute will be made.')
-            input_parameters = {}
+            import_parameters = {}
 
         if crs_working is not None:  # if CRS provided
             check_crs(par='crs_working', crs=crs_working)
-            input_cells = reproject_crs(gdf=input_cells, crs_target=crs_working, additional='centroid')  # reproject
-            input_parameters['cells_crs'] = str(crs_working)  # update parameter
+            import_cells = reproject_crs(gdf=import_cells, crs_target=crs_working, additional='centroid')  # reproject
+            import_parameters['cells_crs'] = str(crs_working)  # update parameter
 
-        return cls(cells=input_cells, name=basename, parameters=input_parameters)
+        return cls(cells=import_cells, name=basename, parameters=import_parameters)
 
     def plot(self, datapoints: DataPoints = None, sections: Sections = None):
 
@@ -748,18 +748,18 @@ class Cells:
         datapoints_plot(ax, datapoints.datapoints) if isinstance(datapoints, DataPoints) else None
         sections_plot(ax, sections.sections) if isinstance(sections, Sections) else None
 
-    def save(self, folder: str, crs_output: str | int | pyproj.crs.crs.CRS = None):
+    def save(self, folder: str, crs_export: str | int | pyproj.crs.crs.CRS = None):
 
         """Save the cells.
 
         Saves the cells GeoDataFrame as two GPKGs: one of the polygons and one of the centroids. The names of the saved
          files will be the name of the Cells object plus '-polygons' and '-centroids', respectively. Additionally, the
-         parameters will be output as a CSV with the same name plus '-parameters'.
+         parameters will be exported as a CSV with the same name plus '-parameters'.
 
         Parameters:
             folder : str
-                The path to the output folder where the output files will be saved
-            crs_output : str | int | pyproj.CRS, optional, default None
+                The path to the export folder where the exported files will be saved
+            crs_export : str | int | pyproj.CRS, optional, default None
                 The CRS to reproject the cells to before saving (only reprojects the cells that are saved and not the
                  Cells object). The CRS must be either: a pyproj.CRS; a string in a format accepted by
                  pyproj.CRS.from_user_input (e.g., 'EPSG:4326'); or an integer in a format accepted by
@@ -769,20 +769,20 @@ class Cells:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        output_cells = self.cells.copy()  # copy cells GeoDataFrame
-        output_parameters = self.parameters.copy()  # copy parameters
+        cells = self.cells.copy()  # copy cells GeoDataFrame
+        parameters = self.parameters.copy()  # copy parameters
 
-        if crs_output is not None:  # if CRS provided
-            check_crs(par='crs_output', crs=crs_output)
-            output_cells = reproject_crs(gdf=output_cells, crs_target=crs_output, additional='centroid')  # reproject
-            output_parameters['cells_crs'] = str(crs_output)  # update parameter
+        if crs_export is not None:  # if CRS provided
+            check_crs(par='crs_export', crs=crs_export)
+            cells = reproject_crs(gdf=cells, crs_target=crs_export, additional='centroid')  # reproject
+            parameters['cells_crs'] = str(crs_export)  # update parameter
 
-        output_cells[['cell_id', 'polygon']].to_file(folder + '/' + self.name + '-polygons.gpkg')  # output polygons
-        output_cells[['cell_id', 'centroid']].to_file(folder + '/' + self.name + '-centroids.gpkg')  # output centroids
+        cells[['cell_id', 'polygon']].to_file(folder + '/' + self.name + '-polygons.gpkg')  # export polygons
+        cells[['cell_id', 'centroid']].to_file(folder + '/' + self.name + '-centroids.gpkg')  # export centroids
 
-        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
-        output_parameters.columns = ['parameter', 'value']  # rename columns
-        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
+        parameters = pd.DataFrame({key: [value] for key, value in parameters.items()}).T.reset_index()  # parameters dataframe
+        parameters.columns = ['parameter', 'value']  # rename columns
+        parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # export parameters
 
 
 class Segments:
@@ -874,25 +874,25 @@ class Segments:
         try:
             midpoints = open_file(folder + basename + '-midpoints.gpkg')
             midpoints.rename_geometry('midpoint', inplace=True)
-            input_segments = pd.merge(lines, midpoints, on='segment_id')
+            import_segments = pd.merge(lines, midpoints, on='segment_id')
         except FileNotFoundError:
             print('Warning: midpoints not found. Segments object will be made without midpoints.')
-            input_segments = lines
-            input_segments['midpoint'] = None
+            import_segments = lines
+            import_segments['midpoint'] = None
 
         try:
-            input_parameters = open_file(folder + basename + '-parameters.csv')
-            input_parameters = input_parameters.set_index('parameter').T.to_dict('records')[0]
+            import_parameters = open_file(folder + basename + '-parameters.csv')
+            import_parameters = import_parameters.set_index('parameter').T.to_dict('records')[0]
         except FileNotFoundError:
             print('Warning: parameters not found. An empty parameters attribute will be made.')
-            input_parameters = {}
+            import_parameters = {}
 
         if crs_working is not None:  # if CRS provided
             check_crs(par='crs_working', crs=crs_working)
-            input_segments = reproject_crs(gdf=input_segments, crs_target=crs_working, additional='midpoint')  # reproject
-            input_parameters['cells_crs'] = str(crs_working)  # update parameter
+            import_segments = reproject_crs(gdf=import_segments, crs_target=crs_working, additional='midpoint')  # reproject
+            import_parameters['cells_crs'] = str(crs_working)  # update parameter
 
-        return cls(segments=input_segments, name=basename, parameters=input_parameters)
+        return cls(segments=import_segments, name=basename, parameters=import_parameters)
 
     def datetimes(self, datapoints: DataPoints):
 
@@ -931,18 +931,18 @@ class Segments:
         sections_plot(ax, sections.sections) if isinstance(sections, Sections) else None
         datapoints_plot(ax, datapoints.datapoints) if isinstance(datapoints, DataPoints) else None
 
-    def save(self, folder: str, crs_output: str | int | pyproj.crs.crs.CRS = None):
+    def save(self, folder: str, crs_export: str | int | pyproj.crs.crs.CRS = None):
 
         """Save the segments.
 
         Saves the segments GeoDataFrame as two GPKGs: one of the lines and one of the midpoints. The names of the saved
          files will be the name of the Segments object plus '-lines' and '-midpoints', respectively. Additionally, the
-         parameters will be output as a CSV with the same name plus '-parameters'.
+         parameters will be exported as a CSV with the same name plus '-parameters'.
 
         Parameters:
             folder : str
-                The path to the output folder where the output files will be saved
-            crs_output : str | int | pyproj.CRS, optional, default None
+                The path to the export folder where the exported files will be saved
+            crs_export : str | int | pyproj.CRS, optional, default None
                 The CRS to reproject the segments to before saving (only reprojects the segments that are saved and not
                  the Segments object). The CRS must be either: a pyproj.CRS; a string in a format accepted by
                  pyproj.CRS.from_user_input (e.g., 'EPSG:4326'); or an integer in a format accepted by
@@ -952,20 +952,20 @@ class Segments:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        output_segments = self.segments.copy()  # copy segments GeoDataFrame
-        output_parameters = self.parameters.copy()  # copy parameters
+        segments = self.segments.copy()  # copy segments GeoDataFrame
+        parameters = self.parameters.copy()  # copy parameters
 
-        if crs_output is not None:  # if CRS provided
-            check_crs(par='crs_output', crs=crs_output)
-            output_segments = reproject_crs(gdf=output_segments, crs_target=crs_output, additional='midpoint')  # reproject
-            output_parameters['segments_crs'] = str(crs_output)  # update parameter
+        if crs_export is not None:  # if CRS provided
+            check_crs(par='crs_export', crs=crs_export)
+            segments = reproject_crs(gdf=segments, crs_target=crs_export, additional='midpoint')  # reproject
+            parameters['segments_crs'] = str(crs_export)  # update parameter
 
-        output_segments[['segment_id', 'line']].to_file(folder + '/' + self.name + '-lines.gpkg')  # output lines
-        output_segments[['segment_id', 'midpoint']].to_file(folder + '/' + self.name + '-midpoints.gpkg')  # output midpoints
+        segments[['segment_id', 'line']].to_file(folder + '/' + self.name + '-lines.gpkg')  # export lines
+        segments[['segment_id', 'midpoint']].to_file(folder + '/' + self.name + '-midpoints.gpkg')  # export midpoints
 
-        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
-        output_parameters.columns = ['parameter', 'value']  # rename columns
-        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
+        parameters = pd.DataFrame({key: [value] for key, value in parameters.items()}).T.reset_index()  # parameters dataframe
+        parameters.columns = ['parameter', 'value']  # rename columns
+        parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # export parameters
 
 
 class Presences:
@@ -1041,18 +1041,18 @@ class Presences:
         points = points[['point_id', 'point', 'date', 'datapoint_id']]
 
         try:
-            input_parameters = open_file(folder + basename + '-parameters.csv')
-            input_parameters = input_parameters.set_index('parameter').T.to_dict('records')[0]
+            import_parameters = open_file(folder + basename + '-parameters.csv')
+            import_parameters = import_parameters.set_index('parameter').T.to_dict('records')[0]
         except FileNotFoundError:
             print('Warning: parameters not found. An empty parameters attribute will be made.')
-            input_parameters = {}
+            import_parameters = {}
 
         if crs_working is not None:  # if CRS provided
             check_crs(par='crs_working', crs=crs_working)
             points = reproject_crs(gdf=points, crs_target=crs_working)  # reproject
-            input_parameters['presences_crs'] = str(crs_working)  # update parameter
+            import_parameters['presences_crs'] = str(crs_working)  # update parameter
 
-        return cls(presences=points, name=basename, parameters=input_parameters)
+        return cls(presences=points, name=basename, parameters=import_parameters)
 
     def plot(self, sp_threshold: int | float = None):
 
@@ -1072,17 +1072,17 @@ class Presences:
         buffer = sp_threshold/2 if isinstance(sp_threshold, (int, float)) else None
         presences_plot(ax=ax, points=self.presences, buffer=buffer)
 
-    def save(self, folder: str, crs_output: str | int | pyproj.crs.crs.CRS = None):
+    def save(self, folder: str, crs_export: str | int | pyproj.crs.crs.CRS = None):
 
         """Save the presences.
 
         Saves the presences as a GPKG file. The name of the saved file will be the name of the Presences object plus
-         '-point'. Additionally, the parameters will be output as a CSV with the same name plus '-parameters'.
+         '-point'. Additionally, the parameters will be exported as a CSV with the same name plus '-parameters'.
 
         Parameters:
             folder : str
-                The path to the output folder where the output files will be saved
-            crs_output : str | int | pyproj.CRS, optional, default None
+                The path to the export folder where the exported files will be saved
+            crs_export : str | int | pyproj.CRS, optional, default None
                 The CRS to reproject the presences to before saving (only reprojects the presences that are saved and
                  not the Presences object). The CRS must be either: a pyproj.CRS; a string in a format accepted by
                  pyproj.CRS.from_user_input (e.g., 'EPSG:4326'); or an integer in a format accepted by
@@ -1092,20 +1092,20 @@ class Presences:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        output_presences = self.presences.copy()  # copy presences GeoDataFrame
-        output_parameters = self.parameters.copy()  # copy parameters
+        presences = self.presences.copy()  # copy presences GeoDataFrame
+        parameters = self.parameters.copy()  # copy parameters
 
-        if crs_output is not None:  # if an output CRS is provided
-            check_crs(par='crs_output', crs=crs_output)
-            output_presences = reproject_crs(gdf=output_presences, crs_target=crs_output)  # reproject
-            output_parameters['presences_crs'] = str(crs_output)  # update parameter
-        output_presences['date'] = output_presences['date'].apply(  # convert date to string if datetime
+        if crs_export is not None:  # if an export CRS is provided
+            check_crs(par='crs_export', crs=crs_export)
+            presences = reproject_crs(gdf=presences, crs_target=crs_export)  # reproject
+            parameters['presences_crs'] = str(crs_export)  # update parameter
+        presences['date'] = presences['date'].apply(  # convert date to string if datetime
             lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
-        output_presences.to_file(folder + '/' + self.name + '-points.gpkg')  # output presences
+        presences.to_file(folder + '/' + self.name + '-points.gpkg')  # export presences
 
-        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
-        output_parameters.columns = ['parameter', 'value']  # rename columns
-        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
+        parameters = pd.DataFrame({key: [value] for key, value in parameters.items()}).T.reset_index()  # parameters dataframe
+        parameters.columns = ['parameter', 'value']  # rename columns
+        parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # export parameters
 
 
 class PresenceZones:
@@ -1204,22 +1204,22 @@ class PresenceZones:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        input_presencezones = open_file(folder + basename + '.gpkg')
-        input_presencezones.rename_geometry('presencezones', inplace=True)
+        import_presencezones = open_file(folder + basename + '.gpkg')
+        import_presencezones.rename_geometry('presencezones', inplace=True)
 
         try:
-            input_parameters = open_file(folder + basename + '-parameters.csv')
-            input_parameters = input_parameters.set_index('parameter').T.to_dict('records')[0]
+            import_parameters = open_file(folder + basename + '-parameters.csv')
+            import_parameters = import_parameters.set_index('parameter').T.to_dict('records')[0]
         except FileNotFoundError:
             print('Warning: parameters not found. An empty parameters attribute will be made.')
-            input_parameters = {}
+            import_parameters = {}
 
         if crs_working is not None:  # if CRS provided
             check_crs(par='crs_working', crs=crs_working)
-            input_presencezones = reproject_crs(gdf=input_presencezones, crs_target=crs_working)  # reproject
-            input_parameters['presencezones_crs'] = str(crs_working)  # update parameter
+            import_presencezones = reproject_crs(gdf=import_presencezones, crs_target=crs_working)  # reproject
+            import_parameters['presencezones_crs'] = str(crs_working)  # update parameter
 
-        return cls(presencezones=input_presencezones, name=basename, parameters=input_parameters)
+        return cls(presencezones=import_presencezones, name=basename, parameters=import_parameters)
 
     def plot(self, sections: Sections = None, presences: Presences = None):
 
@@ -1239,18 +1239,18 @@ class PresenceZones:
         sections_plot(ax, sections.sections) if isinstance(sections, Sections) else None
         presences_plot(ax, presences.presences, buffer=self.parameters['absences_sp_threshold']) if isinstance(presences, Presences) else None
 
-    def save(self, folder: str, crs_output: str | int | pyproj.crs.crs.CRS = None):
+    def save(self, folder: str, crs_export: str | int | pyproj.crs.crs.CRS = None):
 
         """Save the presence zones.
 
         Saves the presence zones GeoDataFrame as a GPKG. The name of the saved file will be the name of the
-         PresenceZones object. Additionally, the parameters will be output as a CSV with the same name plus
+         PresenceZones object. Additionally, the parameters will be exported as a CSV with the same name plus
          '-parameters'.
 
         Parameters:
             folder : str
-                The path to the output folder where the output files will be saved
-            crs_output : str | int | pyproj.CRS, optional, default None
+                The path to the export folder where the exported files will be saved
+            crs_export : str | int | pyproj.CRS, optional, default None
                 The CRS to reproject the presence zones to before saving (only reprojects the presence zones that are
                  saved and not the PresenceZones object). The CRS must be either: a pyproj.CRS; a string in a format
                  accepted by pyproj.CRS.from_user_input (e.g., 'EPSG:4326'); or an integer in a format accepted by
@@ -1260,19 +1260,19 @@ class PresenceZones:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        output_presencezones = self.presencezones.copy()  # copy presence zones GeoDataFrame
-        output_parameters = self.parameters.copy()  # copy parameters
+        presencezones = self.presencezones.copy()  # copy presence zones GeoDataFrame
+        parameters = self.parameters.copy()  # copy parameters
 
-        if crs_output is not None:  # if an output CRS is provided
-            check_crs(par='crs_output', crs=crs_output)
-            output_presencezones = reproject_crs(gdf=output_presencezones, crs_target=crs_output)  # reproject
-            output_parameters['presencezones_crs'] = str(crs_output)  # update parameter
+        if crs_export is not None:  # if an export CRS is provided
+            check_crs(par='crs_export', crs=crs_export)
+            presencezones = reproject_crs(gdf=presencezones, crs_target=crs_export)  # reproject
+            parameters['presencezones_crs'] = str(crs_export)  # update parameter
 
-        output_presencezones.to_file(folder + '/' + self.name + '.gpkg')  # output presence zones
+        presencezones.to_file(folder + '/' + self.name + '.gpkg')  # export presence zones
 
-        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
-        output_parameters.columns = ['parameter', 'value']  # rename columns
-        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
+        parameters = pd.DataFrame({key: [value] for key, value in parameters.items()}).T.reset_index()  # parameters dataframe
+        parameters.columns = ['parameter', 'value']  # rename columns
+        parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # export parameters
 
 
 class Absences:
@@ -1351,7 +1351,7 @@ class Absences:
                      effort (measured as length of the sections) per block
                     'presences': the number of absences per block will be equal to the corresponding number of presences
                      multiplied by the target (e.g., if a block has 19 presences and target=2, then 38 absences will be
-                     generated for that block); note that presences must also be input if using this option
+                     generated for that block); note that presences must also be entered if using this option
             presences : Presences, optional, default None
                 If using block and how='presences', the Presences object on which to base the number of absences. Note
                  that the presences must contain the same block column as the sections.
@@ -1403,18 +1403,18 @@ class Absences:
         points = points[['point_id', 'point', 'date', 'datapoint_id']]
 
         try:
-            input_parameters = open_file(folder + basename + '-parameters.csv')
-            input_parameters = input_parameters.set_index('parameter').T.to_dict('records')[0]
+            import_parameters = open_file(folder + basename + '-parameters.csv')
+            import_parameters = import_parameters.set_index('parameter').T.to_dict('records')[0]
         except FileNotFoundError:
             print('Warning: parameters not found. An empty parameters attribute will be made.')
-            input_parameters = {}
+            import_parameters = {}
 
         if crs_working is not None:  # if CRS provided
             check_crs(par='crs_working', crs=crs_working)
             points = reproject_crs(gdf=points, crs_target=crs_working)  # reproject
-            input_parameters['absences_crs'] = str(crs_working)  # update parameter
+            import_parameters['absences_crs'] = str(crs_working)  # update parameter
 
-        return cls(absences=points, name=basename, parameters=input_parameters)
+        return cls(absences=points, name=basename, parameters=import_parameters)
 
     def plot(self, sp_threshold: int | float = None):
 
@@ -1434,17 +1434,17 @@ class Absences:
         buffer = sp_threshold / 2 if isinstance(sp_threshold, (int, float)) else None
         absences_plot(ax=ax, points=self.absences, buffer=buffer)
 
-    def save(self, folder: str, crs_output: str | int | pyproj.crs.crs.CRS = None):
+    def save(self, folder: str, crs_export: str | int | pyproj.crs.crs.CRS = None):
 
         """Save the absences.
 
         Saves the absences as a GPKG file. The name of the saved file will be the name of the Absences object plus
-         '-point'. Additionally, the parameters will be output as a CSV with the same name plus '-parameters'.
+         '-point'. Additionally, the parameters will be exported as a CSV with the same name plus '-parameters'.
 
         Parameters:
             folder : str
-                The path to the output folder where the output files will be saved
-            crs_output : str | int | pyproj.CRS, optional, default None
+                The path to the export folder where the exported files will be saved
+            crs_export : str | int | pyproj.CRS, optional, default None
                 The CRS to reproject the absences to before saving (only reprojects the absences that are saved and
                  not the Presences object). The CRS must be either: a pyproj.CRS; a string in a format accepted by
                  pyproj.CRS.from_user_input (e.g., 'EPSG:4326'); or an integer in a format accepted by
@@ -1454,21 +1454,21 @@ class Absences:
         check_dtype(par='folder', obj=folder, dtypes=str)
         folder = folder + '/' if folder[-1] != '/' else folder
 
-        output_absences = self.absences.copy()  # copy absences GeoDataFrame
-        output_parameters = self.parameters.copy()  # copy parameters
+        absences = self.absences.copy()  # copy absences GeoDataFrame
+        parameters = self.parameters.copy()  # copy parameters
 
-        if crs_output is not None:  # if an output CRS is provided
-            check_crs(par='crs_output', crs=crs_output)
-            output_absences = reproject_crs(gdf=output_absences, crs_target=crs_output)  # reproject
-            output_parameters['absences_crs'] = str(crs_output)  # update parameter
-        output_absences['date'] = output_absences['date'].apply(  # convert date to string if datetime
+        if crs_export is not None:  # if an export CRS is provided
+            check_crs(par='crs_export', crs=crs_export)
+            absences = reproject_crs(gdf=absences, crs_target=crs_export)  # reproject
+            parameters['absences_crs'] = str(crs_export)  # update parameter
+        absences['date'] = absences['date'].apply(  # convert date to string if datetime
             lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
-        output_absences.to_file(folder + '/' + self.name + '-points.gpkg')  # output absences
+        absences.to_file(folder + '/' + self.name + '-points.gpkg')  # export absences
 
-        output_parameters = pd.DataFrame(
-            {key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
-        output_parameters.columns = ['parameter', 'value']  # rename columns
-        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
+        parameters = pd.DataFrame(
+            {key: [value] for key, value in parameters.items()}).T.reset_index()  # parameters dataframe
+        parameters.columns = ['parameter', 'value']  # rename columns
+        parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # export parameters
 
 
 ##############################################################################################################
@@ -1491,9 +1491,9 @@ class Samples:
     def grid(  # wrapper around samples_grid()
             cls,
             datapoints: DataPoints,
-            cells: Cells,
-            periods: Periods | str | None,
             cols: dict,
+            cells: Cells,
+            periods: Periods | str | None = None,
             full: bool = False):
 
         """Resample datapoints using the grid approach.
@@ -1506,13 +1506,6 @@ class Samples:
         Parameters:
             datapoints : DataPoints
                 The DataPoints object.
-            cells : Cells
-                The Cells object.
-            periods : Periods | str | None
-                One of the following:
-                    a Periods object
-                    a string indicating the name of the column in datapoints containing pre-set periods
-                    None
             cols : dict
                 A dictionary indicating how to treat each of the data columns. The dictionary should have the format:
                     {'COLUMN': FUNCTION,
@@ -1533,6 +1526,13 @@ class Samples:
                 Note that some functions have quotation marks, while others do not. Note that some functions differ in
                  how they treat NA values (missing values) and 0s. It is not necessary to specify all columns, but any
                  columns not specified will not be retained. Each column can only be specified once.
+            cells : Cells
+                The Cells object.
+            periods : Periods | str | None, optional, default None
+                One of the following:
+                    a Periods object
+                    a string indicating the name of the column in datapoints containing pre-set periods
+                    None
             full : bool, optional, default False
                 If False, only those cell-period combinations that have at least one datapoint will be included in
                  samples. If True, all possible cell-period combinations will be included in samples (note that this
@@ -1726,7 +1726,7 @@ class Samples:
             cls,
             sections: Sections,
             cells: Cells,
-            periods: Periods | str | None,
+            periods: Periods | str | None = None,
             length: bool = True,
             esw: int | float = None,
             euc_geo: str = 'euclidean',
@@ -1748,7 +1748,7 @@ class Samples:
                 The Sections object.
             cells : Cells
                 The Cells object.
-            periods : Periods | str | None
+            periods : Periods | str | None, optional, default None
                 One of the following:
                     a Periods object
                     a string indicating the name of the column in datapoints containing pre-set periods
@@ -1886,7 +1886,7 @@ class Samples:
                 Returns a Samples object with three attributes: name, parameters, and samples.
         """
 
-        # make a DataFrame of all the parameters and their values from all input Samples
+        # make a DataFrame of all the parameters and their values from all Samples
         parameters_list = []  # list for parameters
         for samples in kwargs.values():  # for each samples, append its parameters to list
             parameters_list.append(pd.DataFrame({key: [samples.parameters[key]] for key in samples.parameters.keys()}))
@@ -1940,10 +1940,10 @@ class Samples:
 
         # make name
         if approach == 'grid':  # grid approach
-            name = ('samples-' + '+'.join([name for name in kwargs.keys()]) + '-x-' +  # joined input names plus...
+            name = ('samples-' + '+'.join([name for name in kwargs.keys()]) + '-x-' +  # joined names plus...
                     parameters['cells_name'] + '-x-' + parameters['periods_name'])  # ...cells and periods names
         elif approach == 'segment':  # segment approach
-            name = ('samples-' + '+'.join([name for name in kwargs.keys()]) + '-x-' +  # joined input names plus...
+            name = ('samples-' + '+'.join([name for name in kwargs.keys()]) + '-x-' +  # joined names plus...
                     parameters['segments_name'])  # ...segments names
         else:  # unknown approach (should never be reached)
             raise ValueError
@@ -1962,7 +1962,7 @@ class Samples:
             tm_unit: str = 'day',
             block: str = None):
 
-        """Spatiotemporally thin the samples.
+        """Spatially, temporally, or spatiotemporally thin the samples.
 
         Spatially, temporally, or spatiotemporally thin the samples so that no two samples are within some spatial
          threshold and/or within some temporal threshold of each other.
@@ -2055,23 +2055,23 @@ class Samples:
             self,
             folder: str,
             filetype: str = 'both',
-            crs_output: str | int | pyproj.crs.crs.CRS = None,
+            crs_export: str | int | pyproj.crs.crs.CRS = None,
             coords: bool = False):
 
         """Save the samples.
 
         Saves the samples GeoDataFrame as a GPKG, a CSV, or both. The name of the saved file(s) will be the name of the
-         Samples object. Additionally, the parameters will be output as a CSV with the same name plus '-parameters'.
+         Samples object. Additionally, the parameters will be exported as a CSV with the same name plus '-parameters'.
 
         Parameters:
             folder : str
-                The path to the output folder where the output files will be saved
+                The path to the export folder where the exported files will be saved
             filetype : {'gpkg', 'csv', 'both'}, optional, default 'gpkg'
                 The type of file that the sections will be saved as.
                     gpkg: GeoPackage
                     csv: CSV
                     both: GeoPackage and CSV
-            crs_output : str | int | pyproj.CRS, optional, default None
+            crs_export : str | int | pyproj.CRS, optional, default None
                 Optionally, the CRS to reproject the samples to before saving (only reprojects the samples that are
                  saved and not the Samples object).
             coords : bool, optional, default False
@@ -2086,28 +2086,28 @@ class Samples:
         filetype = filetype.lower()
         check_opt(par='filetype', opt=filetype, opts=['both', 'csv', 'gpkg'])
 
-        output_samples = self.samples.copy()
-        output_parameters = self.parameters.copy()
+        samples = self.samples.copy()
+        parameters = self.parameters.copy()
 
-        if crs_output is not None:  # if CRS provided
-            check_crs(par='crs_output', crs=crs_output)
-            output_samples = reproject_crs(gdf=output_samples, crs_target=crs_output, additional=[c for c in ['centroid', 'midpoint'] if c in output_samples])  # reproject
-            output_parameters['samples_crs'] = str(crs_output)  # update parameter
-        output_samples = extract_coords(samples=output_samples) if coords else output_samples  # extract coords (if coords)
+        if crs_export is not None:  # if CRS provided
+            check_crs(par='crs_export', crs=crs_export)
+            samples = reproject_crs(gdf=samples, crs_target=crs_export, additional=[c for c in ['centroid', 'midpoint'] if c in samples])  # reproject
+            parameters['samples_crs'] = str(crs_export)  # update parameter
+        samples = extract_coords(samples=samples) if coords else samples  # extract coords (if coords)
 
         for col in ['date', 'date_beg', 'date_mid', 'date_end']:  # for each potential date col...
-            if col in output_samples:  # ...if present...
-                output_samples[col] = output_samples[col].apply(  # convert date to string if there is date
+            if col in samples:  # ...if present...
+                samples[col] = samples[col].apply(  # convert date to string if there is date
                     lambda dt: dt.strftime('%Y-%m-%d') if isinstance(dt, (datetime | pd.Timestamp)) else dt)
 
         if filetype in ['csv', 'both']:  # if CSV
-            output_samples.to_csv(folder + '/' + self.name + '.csv', index=False)  # output
+            samples.to_csv(folder + '/' + self.name + '.csv', index=False)  # export
         if filetype in ['gpkg', 'both']:  # if GPKG
             for col in ['centroid', 'midpoint']:  # ...for each extra geometry col...
-                if col in output_samples:  # ...if present...
-                    output_samples[col] = output_samples[col].to_wkt()  # ...convert to wkt
-            output_samples.to_file(folder + '/' + self.name + '.gpkg')  # output
+                if col in samples:  # ...if present...
+                    samples[col] = samples[col].to_wkt()  # ...convert to wkt
+            samples.to_file(folder + '/' + self.name + '.gpkg')  # export
 
-        output_parameters = pd.DataFrame({key: [value] for key, value in output_parameters.items()}).T.reset_index()  # parameters dataframe
-        output_parameters.columns = ['parameter', 'value']  # rename columns
-        output_parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # output parameters
+        parameters = pd.DataFrame({key: [value] for key, value in parameters.items()}).T.reset_index()  # parameters dataframe
+        parameters.columns = ['parameter', 'value']  # rename columns
+        parameters.to_csv(folder + '/' + self.name + '-parameters.csv', index=False)  # export parameters
