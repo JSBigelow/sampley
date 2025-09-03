@@ -1,0 +1,5 @@
+parameter,value
+presencezones_crs,EPSG:4326
+presencezones_sp_threshold,10000
+presencezones_tm_threshold,0
+presencezones_tm_unit,doy

@@ -1,0 +1,8 @@
+parameter,value
+cells_crs,EPSG:4326
+cells_extent,"495765.49253164633, 4691798.086839909, 673300.7003074563, 4761798.086839909"
+cells_extent_source,Sections - sections-sections
+cells_var,hexagonal
+cells_side,5000
+cells_unit,metre
+cells_buffer,

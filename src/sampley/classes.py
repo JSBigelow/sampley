@@ -1038,7 +1038,6 @@ class Presences:
 
         points = open_file(folder + basename + '-points.gpkg')
         points.rename_geometry('point', inplace=True)
-        points = points[['point_id', 'point', 'date', 'datapoint_id']]
 
         try:
             import_parameters = open_file(folder + basename + '-parameters.csv')
@@ -1054,23 +1053,15 @@ class Presences:
 
         return cls(presences=points, name=basename, parameters=import_parameters)
 
-    def plot(self, sp_threshold: int | float = None):
+    def plot(self):
 
         """Plot the presences.
 
         Makes a basic matplotlib plot of the presences.
-
-        Parameters:
-            sp_threshold : int | float, optional, default None
-                The spatial threshold used for generating absences in the units of the CRS. If
-                 specified, the plot will add a circle around each point to represent the spatial threshold.
         """
 
-        check_dtype(par='sp_threshold', obj=sp_threshold, dtypes=[int, float], none_allowed=True)
-
         fig, ax = plt.subplots(figsize=(16, 8))
-        buffer = sp_threshold/2 if isinstance(sp_threshold, (int, float)) else None
-        presences_plot(ax=ax, points=self.presences, buffer=buffer)
+        presences_plot(ax=ax, points=self.presences, buffer=None)
 
     def save(self, folder: str, crs_export: str | int | pyproj.crs.crs.CRS = None):
 
@@ -1237,7 +1228,7 @@ class PresenceZones:
         fig, ax = plt.subplots(figsize=(16, 8))
         presencezones_plot(ax, self.presencezones)
         sections_plot(ax, sections.sections) if isinstance(sections, Sections) else None
-        presences_plot(ax, presences.presences, buffer=self.parameters['absences_sp_threshold']) if isinstance(presences, Presences) else None
+        presences_plot(ax, presences.presences) if isinstance(presences, Presences) else None
 
     def save(self, folder: str, crs_export: str | int | pyproj.crs.crs.CRS = None):
 
@@ -1400,7 +1391,6 @@ class Absences:
 
         points = open_file(folder + basename + '-points.gpkg')
         points.rename_geometry('point', inplace=True)
-        points = points[['point_id', 'point', 'date', 'datapoint_id']]
 
         try:
             import_parameters = open_file(folder + basename + '-parameters.csv')
@@ -1416,23 +1406,20 @@ class Absences:
 
         return cls(absences=points, name=basename, parameters=import_parameters)
 
-    def plot(self, sp_threshold: int | float = None):
+    def plot(self, presencezones: PresenceZones = None):
 
         """Plot the absences.
 
         Makes a basic matplotlib plot of the absences.
 
         Parameters:
-            sp_threshold : int | float, optional, default None
-                The spatial threshold used for generating absences in the units of the CRS. If specified, the plot will
-                 add a circle around each point to represent the spatial threshold.
+            presencezones : PresenceZones, optional, default None
+                Optionally, a PresenceZones object with presence zones to be plotted with the absences.
         """
 
-        check_dtype(par='sp_threshold', obj=sp_threshold, dtypes=[int, float], none_allowed=True)
-
         fig, ax = plt.subplots(figsize=(16, 8))
-        buffer = sp_threshold / 2 if isinstance(sp_threshold, (int, float)) else None
-        absences_plot(ax=ax, points=self.absences, buffer=buffer)
+        absences_plot(ax=ax, points=self.absences, buffer=None)
+        presencezones_plot(ax, presencezones.presencezones) if isinstance(presencezones, PresenceZones) else None
 
     def save(self, folder: str, crs_export: str | int | pyproj.crs.crs.CRS = None):
 

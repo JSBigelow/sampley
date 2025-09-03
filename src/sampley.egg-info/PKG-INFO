@@ -1,9 +1,8 @@
 Metadata-Version: 2.4
 Name: sampley
-Version: 0.0.14
+Version: 0.0.15
 Summary: sample survey data
-Author-email: Jonathan Syme <jsyme@bigelow.org>
-Maintainer-email: Jonathan Syme <jsyme@bigelow.org>
+Author: <temporarily redacted>
 License-Expression: MIT
 Project-URL: Homepage, https://github.com/JSBigelow/sampley
 Project-URL: Repository, https://github.com/JSBigelow/sampley

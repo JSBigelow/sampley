@@ -1,0 +1,5 @@
+parameter,value
+datapoints_filepath,./import/trackpoints.csv
+datapoints_crs,EPSG:4326
+datapoints_tz,UTC-05:00
+datapoints_data_cols,"section_id, individuals, bss, season"

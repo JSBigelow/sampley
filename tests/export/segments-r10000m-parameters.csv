@@ -1,0 +1,7 @@
+parameter,value
+sections_name,sections-trackpoints
+segments_crs,EPSG:4326
+segments_var,redistribution
+segments_rand,False
+segments_target,10000
+segments_unit,metre
